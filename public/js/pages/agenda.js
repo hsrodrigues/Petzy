@@ -38,6 +38,7 @@ export async function render(view, { params }) {
         <h5 class="mb-0 ms-2 fw-bold" id="titulo"></h5>
         <select class="form-select w-auto ms-auto" id="fProf"><option value="">Todos os profissionais</option>
           ${equipe.map(e => `<option value="${e.id}">${esc(e.nome)}</option>`).join('')}</select>
+        <button class="btn btn-light border" id="limparFiltros" title="Limpar filtros"><i class="bi bi-x-circle me-1"></i>Limpar</button>
         <div class="d-none d-xl-flex gap-2 fs-8">
           ${TIPOS.map(t => `<span class="ag-event ${t.value} mb-0 py-1">${t.label}</span>`).join('')}
         </div>
@@ -244,6 +245,7 @@ export async function render(view, { params }) {
   $('#next', view).onclick = () => { semana = addDays(semana, 7); carregar(); };
   $('#hoje', view).onclick = () => { semana = inicioSemana(new Date()); carregar(); };
   $('#fProf', view).onchange = desenhar;
+  $('#limparFiltros', view).onclick = () => { $('#fProf', view).value = ''; desenhar(); };
   $('#btnNovo', view).onclick = () => { const d = new Date(); d.setMinutes(d.getMinutes() < 30 ? 30 : 60, 0, 0); abrirForm({ inicio: toISODateTime(d) }); };
 
   await carregar();

@@ -137,6 +137,7 @@ export async function render(view, { params }) {
         </div>
         <select class="form-select w-auto" id="fTipo"><option value="">Todos os tipos</option>${TIPOS.map(t => `<option>${t}</option>`).join('')}</select>
         <select class="form-select w-auto" id="fPeriodo"><option value="">Qualquer data</option><option value="hoje">Hoje</option><option value="7">Últimos 7 dias</option><option value="30">Últimos 30 dias</option><option value="retorno">Retornos próximos</option></select>
+        <button class="btn btn-light border" id="limparFiltros" title="Limpar filtros"><i class="bi bi-x-circle me-1"></i>Limpar</button>
       </div>
       <div class="table-responsive"><table class="table table-hover">
         <thead><tr><th>Data</th><th>Paciente</th><th>Tipo</th><th>Diagnóstico</th><th>Receita</th><th>Veterinário</th><th class="text-end">Ações</th></tr></thead>
@@ -359,6 +360,7 @@ export async function render(view, { params }) {
   $('#busca', view).addEventListener('input', debounce(desenhar, 150));
   $('#fTipo', view).onchange = desenhar;
   $('#fPeriodo', view).onchange = desenhar;
+  $('#limparFiltros', view).onclick = () => { $('#busca', view).value = ''; $('#fTipo', view).value = ''; $('#fPeriodo', view).value = ''; desenhar(); };
   $('#btnNovo', view).onclick = () => abrirForm();
   $('#tbody', view).onclick = async (e) => {
     const b = e.target.closest('button'); if (!b) return;

@@ -67,6 +67,7 @@ export async function render(view, { params }) {
           <input class="form-control ps-5" id="busca" placeholder="Buscar por nome, telefone, CPF ou pet...">
         </div>
         <span class="text-muted fs-7 ms-auto" id="contador"></span>
+          <button class="btn btn-light border" id="limparFiltros" title="Limpar filtros"><i class="bi bi-x-circle me-1"></i>Limpar</button>
       </div>
       <div class="table-responsive"><table class="table table-hover">
         <thead><tr><th>Tutor</th><th>Contato</th><th>Pets</th><th>Cidade</th><th class="text-end">Ações</th></tr></thead>
@@ -102,6 +103,7 @@ export async function render(view, { params }) {
   async function recarregar() { ({ clientes, pets } = await loadTutoresPets()); desenhar(); }
 
   busca.addEventListener('input', debounce(desenhar, 150));
+  $('#limparFiltros', view).onclick = () => { busca.value = ''; desenhar(); };
   $('#btnNovo', view).onclick = () => abrirFormCliente({}, recarregar);
   $('#btnCsv', view).onclick = () => exportCSV('tutores.csv', clientes.map(c => ({
     Nome: c.nome, CPF: c.cpf, Telefone: c.telefone, Email: c.email, Cidade: c.cidade, UF: c.uf,

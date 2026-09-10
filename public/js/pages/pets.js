@@ -77,6 +77,7 @@ export async function render(view, { args, params }) {
         <input class="form-control ps-5" id="busca" placeholder="Nome do pet, tutor, raça, microchip...">
       </div>
       <select class="form-select w-auto" id="fEspecie"><option value="">Todas as espécies</option>${ESPECIES.map(e => `<option>${e}</option>`).join('')}</select>
+      <button class="btn btn-light border" id="limparFiltros" title="Limpar filtros"><i class="bi bi-x-circle me-1"></i>Limpar</button>
       <span class="text-muted fs-7 ms-auto" id="contador"></span>
     </div></div>
     <div class="row g-3" id="grid"></div>`;
@@ -113,6 +114,7 @@ export async function render(view, { args, params }) {
   const recarregar = async () => { dados = await loadTutoresPets(); desenhar(); };
   busca.addEventListener('input', debounce(desenhar, 150));
   $('#fEspecie', view).onchange = desenhar;
+  $('#limparFiltros', view).onclick = () => { busca.value = ''; $('#fEspecie', view).value = ''; desenhar(); };
   $('#btnNovo', view).onclick = () => {
     if (!dados.clientes.length) return toast('Cadastre um tutor primeiro.', 'warning');
     abrirFormPet({}, dados, recarregar);

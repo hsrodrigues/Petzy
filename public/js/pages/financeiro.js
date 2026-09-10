@@ -26,6 +26,7 @@ export async function render(view) {
         <select class="form-select w-auto" id="fStatus"><option value="">Todos</option><option value="pago">Pagos</option><option value="aberto">Em aberto</option><option value="vencido">Vencidos</option></select>
         <select class="form-select w-auto" id="fOrigem"><option value="">Todos os lançamentos</option><option value="fiado">Fiado em aberto</option></select>
         <input class="form-control ms-auto" style="max-width:240px" id="busca" placeholder="Buscar descrição...">
+        <button class="btn btn-light border" id="limparFiltros" title="Limpar filtros"><i class="bi bi-x-circle me-1"></i>Limpar</button>
       </div>
       <div class="table-responsive"><table class="table table-hover">
         <thead><tr><th>Vencimento</th><th>Descrição</th><th>Categoria</th><th>Forma</th><th>Status</th><th class="text-end">Valor</th><th class="text-end">Ações</th></tr></thead>
@@ -112,6 +113,7 @@ export async function render(view) {
   $('#fTipo', view).onchange = desenhar;
   $('#fStatus', view).onchange = desenhar;
   $('#fOrigem', view).onchange = carregar;
+  $('#limparFiltros', view).onclick = () => { mes = today().slice(0, 7); $('#mes', view).value = mes; $('#fTipo', view).value = ''; $('#fStatus', view).value = ''; $('#fOrigem', view).value = ''; $('#busca', view).value = ''; carregar(); };
   $('#busca', view).addEventListener('input', debounce(desenhar, 150));
   $('#btnCsv', view).onclick = () => exportCSV(`financeiro-${mes}.csv`, lancs.map(l => ({
     Vencimento: l.vencimento, Tipo: l.tipo, Descricao: l.descricao, Categoria: l.categoria, Forma: l.formaPagamento,

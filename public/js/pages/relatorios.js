@@ -15,6 +15,7 @@ export async function render(view) {
           <option value="90">Últimos 90 dias</option><option value="mes">Este mês</option><option value="ano">Este ano</option><option value="custom">Personalizado</option>
         </select>
         <input type="date" class="form-control w-auto" id="ini"><input type="date" class="form-control w-auto" id="fim">
+        <button class="btn btn-light border" id="limparFiltros" title="Limpar filtros"><i class="bi bi-x-circle me-1"></i>Limpar</button>
         <button class="btn btn-light border" id="btnCsv"><i class="bi bi-download me-1"></i>CSV</button>
         <button class="btn btn-outline-primary" id="btnGerencial"><i class="bi bi-file-earmark-pdf me-1"></i>Relatório PDF</button>
         <button class="btn btn-primary" id="btnDre"><i class="bi bi-file-earmark-bar-graph me-1"></i>DRE para contador</button>
@@ -156,6 +157,7 @@ export async function render(view) {
 
   $('#preset', view).onchange = () => { aplicarPreset(); carregar(); };
   $('#ini', view).onchange = $('#fim', view).onchange = () => { $('#preset', view).value = 'custom'; carregar(); };
+  $('#limparFiltros', view).onclick = () => { $('#preset', view).value = '30'; aplicarPreset(); carregar(); };
   $('#btnCsv', view).onclick = () => exportCSV('relatorio-itens.csv', exportRows);
   $('#btnGerencial', view).onclick = () => abrirRelatorio('gerencial');
   $('#btnDre', view).onclick = () => abrirRelatorio('dre');

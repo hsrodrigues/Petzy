@@ -10,7 +10,7 @@ export async function render(view) {
       `<button class="btn btn-light border" id="btnCsv"><i class="bi bi-download me-1"></i>Exportar</button>
        <button class="btn btn-primary" id="btnNovo"><i class="bi bi-plus-lg me-1"></i>Novo fornecedor</button>`)}
     <div class="card">
-      <div class="card-header"><input class="form-control" style="max-width:360px" id="busca" placeholder="Buscar por nome, documento ou contato..."></div>
+      <div class="card-header d-flex gap-2"><input class="form-control" style="max-width:360px" id="busca" placeholder="Buscar por nome, documento ou contato..."><button class="btn btn-light border" id="limparFiltros" title="Limpar filtros"><i class="bi bi-x-circle me-1"></i>Limpar</button></div>
       <div class="table-responsive"><table class="table table-hover"><thead><tr><th>Fornecedor</th><th>Documento</th><th>Contato</th><th>Telefone</th><th class="text-end">Ações</th></tr></thead><tbody id="tbody"></tbody></table></div>
     </div>`;
 
@@ -43,6 +43,7 @@ export async function render(view) {
 
   $('#btnNovo', view).onclick = () => abrirForm();
   $('#busca', view).addEventListener('input', debounce(desenhar, 150));
+  $('#limparFiltros', view).onclick = () => { $('#busca', view).value = ''; desenhar(); };
   $('#btnCsv', view).onclick = () => exportCSV('fornecedores.csv', fornecedores.map(f => ({ Nome: f.nome, Documento: f.documento, Contato: f.contato, Telefone: f.telefone, Email: f.email, Endereco: f.endereco })));
   $('#tbody', view).onclick = async (e) => {
     if (e.target.closest('[data-vazio-novo]')) return abrirForm();

@@ -23,6 +23,7 @@ export async function render(view) {
             <input class="form-control form-control-lg ps-5" id="busca" placeholder="Buscar produto/serviço ou bipar código de barras..." autofocus>
           </div>
           <select class="form-select form-select-lg w-auto" id="fTipo"><option value="">Tudo</option><option value="produto">Produtos</option><option value="servico">Serviços</option></select>
+          <button class="btn btn-light border btn-lg" id="limparFiltros" title="Limpar filtros"><i class="bi bi-x-circle"></i></button>
         </div></div>
         <div class="row g-2" id="grid"></div>
       </div>
@@ -175,6 +176,7 @@ export async function render(view) {
     if (p) { adicionar(p.id); busca.value = ''; desenharCatalogo(); }
   });
   $('#fTipo', view).onchange = desenharCatalogo;
+  $('#limparFiltros', view).onclick = () => { busca.value = ''; $('#fTipo', view).value = ''; desenharCatalogo(); };
   $('#grid', view).onclick = (e) => { const c = e.target.closest('[data-add]'); if (c) adicionar(c.dataset.add); };
   $('#itens', view).onclick = (e) => {
     const b = e.target.closest('button'); if (!b) return;

@@ -27,6 +27,7 @@ export async function render(view) {
         <select class="form-select w-auto ms-auto" id="fCat"></select>
         <input class="form-control" style="max-width:260px" id="busca" placeholder="Nome ou código...">
         <div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="fBaixo"><label class="form-check-label fs-7">Estoque baixo</label></div>
+        <button class="btn btn-light border" id="limparFiltros" title="Limpar filtros"><i class="bi bi-x-circle me-1"></i>Limpar</button>
       </div>
       <div class="table-responsive"><table class="table table-hover">
         <thead id="thead"></thead><tbody id="tbody"></tbody>
@@ -168,6 +169,7 @@ export async function render(view) {
   $('#fCat', view).onchange = desenhar;
   $('#fBaixo', view).onchange = desenhar;
   $('#busca', view).addEventListener('input', debounce(desenhar, 150));
+  $('#limparFiltros', view).onclick = () => { $('#fCat', view).value = ''; $('#busca', view).value = ''; $('#fBaixo', view).checked = false; desenhar(); };
   $('#btnNovo', view).onclick = () => abrirForm();
   $('#btnCsv', view).onclick = () => exportCSV('produtos.csv', itens.map(i => ({
     Nome: i.nome, Tipo: i.tipo, Categoria: i.categoria, Codigo: i.codigo, Custo: i.precoCusto, Venda: i.precoVenda, Estoque: i.estoque, Minimo: i.estoqueMinimo

@@ -27,6 +27,7 @@ export async function render(view, { params }) {
           <button class="btn btn-light border" data-f="atrasadas">Atrasadas</button>
         </div>
         <input class="form-control ms-auto" style="max-width:280px" id="busca" placeholder="Buscar pet, tutor ou vacina...">
+        <button class="btn btn-light border" id="limparFiltros" title="Limpar filtros"><i class="bi bi-x-circle me-1"></i>Limpar</button>
       </div>
       <div class="table-responsive"><table class="table table-hover">
         <thead><tr><th>Pet</th><th>Vacina</th><th>Aplicação</th><th>Próxima dose</th><th>Lote / fabricante</th><th class="text-end">Ações</th></tr></thead>
@@ -115,6 +116,7 @@ export async function render(view, { params }) {
     desenhar();
   };
   $('#busca', view).addEventListener('input', debounce(desenhar, 150));
+  $('#limparFiltros', view).onclick = () => { filtro = 'todas'; $('#busca', view).value = ''; $('#filtros', view).querySelectorAll('button').forEach(x => x.classList.toggle('active', x.dataset.f === 'todas')); desenhar(); };
   $('#btnNovo', view).onclick = () => abrirForm();
   $('#tbody', view).onclick = async (e) => {
     const b = e.target.closest('button'); if (!b) return;
