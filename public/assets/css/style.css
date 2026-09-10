@@ -144,7 +144,12 @@ input[type=color].form-control { padding: .25rem; height: 42px; }
    body.sidebar-collapsed .app-sidebar .nav-link i { font-size: 1.1rem; }
    body.sidebar-collapsed .sidebar-footer { padding: .75rem; }
    body.sidebar-collapsed .plan-card { padding: .55rem; text-align: center; font-size: 0; }
-   body.sidebar-collapsed .plan-card::before { content: '\2699'; font-size: 1.15rem; }
+   body.sidebar-collapsed .plan-card strong,
+   body.sidebar-collapsed .plan-card > div,
+   body.sidebar-collapsed .plan-card > span { display: none; }
+   body.sidebar-collapsed .plan-card a { display: grid; place-items: center; width: 100%; height: 36px; padding: 0; }
+   body.sidebar-collapsed .plan-card a span { display: none; }
+   body.sidebar-collapsed .plan-card a i { font-size: 1rem; }
 }
 
 @media (max-width: 991.98px) {

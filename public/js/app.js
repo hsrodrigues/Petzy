@@ -46,7 +46,7 @@ export function renderLicenca() {
       <span class="badge ${L.ativa ? 'bg-success' : 'bg-danger'}">${L.ativa ? 'Ativo' : 'Vencido'}</span>
     </div>
     <div class="opacity-75 mb-2">${L.ativa ? `Válido até ${L.validoAte.toLocaleDateString('pt-BR')}` : 'Renove para voltar a editar'}</div>
-    <a href="#/assinatura" class="btn btn-sm btn-light w-100 fw-semibold">${L.plano === 'trial' || !L.ativa ? 'Assinar agora' : 'Gerenciar plano'}</a>`;
+    <a href="#/assinatura" class="btn btn-sm btn-light w-100 fw-semibold" title="${L.plano === 'trial' || !L.ativa ? 'Assinar agora' : 'Gerenciar plano'}"><i class="bi bi-credit-card"></i><span>${L.plano === 'trial' || !L.ativa ? 'Assinar agora' : 'Gerenciar plano'}</span></a>`;
 
   let bar = '';
   if (!L.ativa) {
