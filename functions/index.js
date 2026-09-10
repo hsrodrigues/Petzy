@@ -10,7 +10,6 @@ const tecnospeedApiKey = defineSecret('TECNOSPEED_API_KEY');
 const tecnospeedBaseUrl = defineString('TECNOSPEED_API_BASE_URL', {
   default: 'https://api.plugnotas.com.br'
 });
-const secretManager = new SecretManagerServiceClient();
 
 const endpoints = { nf: 'nfe', nfe: 'nfe', nfce: 'nfce', nfse: 'nfse' };
 
@@ -26,6 +25,7 @@ exports.configurarTokenTecnoSpeed = onCall({
   const token = String(request.data?.token || '').trim();
   if (token.length < 10 || token.length > 500) throw new HttpsError('invalid-argument', 'Token TecnoSpeed inválido.');
 
+  const secretManager = new SecretManagerServiceClient();
   const projectId = process.env.GCLOUD_PROJECT;
   const secretName = `projects/${projectId}/secrets/TECNOSPEED_API_KEY`;
   try {
