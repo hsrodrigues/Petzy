@@ -94,9 +94,13 @@ const ACESSO = {
   groomer: ['dashboard', 'agenda', 'clientes', 'pets']
 };
 
+export const MODULOS = ['dashboard', 'agenda', 'clientes', 'pets', 'prontuarios', 'vacinas', 'pdv', 'produtos', 'fornecedores', 'financeiro', 'relatorios', 'configuracoes'];
+
 export const pode = (rota) => {
   const a = ACESSO[state.perfil?.papel] || [];
-  return a === '*' || a.includes(rota);
+  const extras = state.perfil?.modulosExtras || [];
+  const bloqueados = state.perfil?.modulosBloqueados || [];
+  return (a === '*' || a.includes(rota) || extras.includes(rota)) && !bloqueados.includes(rota);
 };
 
 // ---------- Licença (assinatura mensal) ----------

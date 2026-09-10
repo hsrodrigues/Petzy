@@ -1,4 +1,4 @@
-import { state, list, ref, where, PAPEIS, PLANOS, db, writeBatch, col } from '../store.js';
+import { state, list, ref, where, PAPEIS, PLANOS, MODULOS, db, writeBatch, col } from '../store.js';
 import {
   doc, setDoc, updateDoc, initializeApp, deleteApp, getAuth, createUserWithEmailAndPassword, signOut, firebaseConfig,
   storage, ref as sRef, uploadBytes, getDownloadURL, deleteObject, emulador, connectAuthEmulator
@@ -208,6 +208,7 @@ export async function render(view) {
       <td>${m.ativo ? badge('ativo', 'success') : badge('inativo', 'secondary')}</td>
       ${admin ? `<td class="text-end text-nowrap">${m.id === c.ownerUid ? '<span class="text-muted fs-8">proprietário</span>' : `
         <button class="btn btn-sm btn-light border" data-papel="${m.id}">Função</button>
+        <button class="btn btn-sm btn-light border" data-modulos="${m.id}"><i class="bi bi-grid-3x3-gap me-1"></i>Módulos</button>
         <button class="btn btn-sm ${m.ativo ? 'btn-outline-danger' : 'btn-outline-success'}" data-toggle="${m.id}">${m.ativo ? 'Desativar' : 'Reativar'}</button>`}</td>` : ''}
     </tr>`).join('');
   }
@@ -254,7 +255,7 @@ export async function render(view) {
 
     $('#tbEquipe', view).onclick = async (e) => {
       const b = e.target.closest('button'); if (!b) return;
-      const m = equipe.find(x => x.id === (b.dataset.papel || b.dataset.toggle));
+      const m = equipe.find(x => x.id === (b.dataset.papel || b.dataset.modulos || b.dataset.toggle));
       if (b.dataset.toggle) {
         if (!m.ativo && equipe.filter(x => x.ativo).length >= limite) return toast('Limite de usuários do plano atingido.', 'warning');
         if (m.ativo && !(await confirmar(`Desativar o acesso de <strong>${esc(m.nome)}</strong>?`))) return;
@@ -265,6 +266,28 @@ export async function render(view) {
         fields: [{ name: 'papel', label: 'Função', type: 'select', required: true, options: Object.entries(PAPEIS).map(([v, l]) => ({ value: v, label: l })), col: 'col-12' }],
         onSubmit: async (d) => { await atualizarMembro(m.id, { papel: d.papel }); toast('Função alterada'); }
       });
+      if (b.dataset.modulos) {
+        const labels = {
+          dashboard: 'Dashboard', agenda: 'Agenda', clientes: 'Tutores', pets: 'Pets', prontuarios: 'Prontuários',
+          vacinas: 'Vacinas', pdv: 'PDV / Vendas', produtos: 'Produtos & Serviços', fornecedores: 'Fornecedores',
+          financeiro: 'Financeiro', relatorios: 'Relatórios', configuracoes: 'Configurações'
+        };
+        const extras = m.modulosExtras || [], bloqueados = m.modulosBloqueados || [];
+        formModal({
+          title: `Módulos · ${esc(m.nome)}`, size: 'lg', submit: 'Salvar módulos',
+          fields: MODULOS.map(k => ({
+            name: `mod_${k}`, label: labels[k] || k, type: 'select', col: 'col-md-6',
+            options: [{ value: '', label: 'Padrão da função' }, { value: 'liberado', label: 'Liberado' }, { value: 'bloqueado', label: 'Bloqueado' }],
+            default: extras.includes(k) ? 'liberado' : bloqueados.includes(k) ? 'bloqueado' : ''
+          })),
+          onSubmit: async (d) => {
+            const modulosExtras = MODULOS.filter(k => d[`mod_${k}`] === 'liberado');
+            const modulosBloqueados = MODULOS.filter(k => d[`mod_${k}`] === 'bloqueado');
+            await atualizarMembro(m.id, { modulosExtras, modulosBloqueados });
+            toast('Módulos atualizados');
+          }
+        });
+      }
     };
 
     // ---------- dados ----------
