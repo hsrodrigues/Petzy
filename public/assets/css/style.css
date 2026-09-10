@@ -87,7 +87,7 @@ input[type=color].form-control { padding: .25rem; height: 42px; }
 @media (max-width: 575.98px) {
    .kpi { gap: .5rem; align-items: flex-start; }
    .kpi-icon { width: 34px; height: 34px; font-size: .9rem; }
-   .kpi-value { font-size: .78rem; line-height: 1.15; }
+   .kpi-value { font-size: .7rem; line-height: 1.15; }
    .kpi-label { font-size: .72rem; line-height: 1.15; }
 }
 
@@ -129,6 +129,7 @@ input[type=color].form-control { padding: .25rem; height: 42px; }
 .app-sidebar .nav-link.active { background: var(--pz-primary); color: #fff; box-shadow: 0 6px 16px rgba(108, 92, 231, .35); }
 .sidebar-footer { padding: 1rem; border-top: 1px solid rgba(255, 255, 255, .06); }
 .plan-card { background: linear-gradient(135deg, rgba(108, 92, 231, .25), rgba(168, 85, 247, .15)); border-radius: 12px; padding: .9rem; color: #fff; font-size: .82rem; }
+.plan-card a { display: inline-flex; align-items: center; gap: .4rem; }
 
 .app-main { margin-left: var(--pz-sidebar-w); min-height: 100vh; display: flex; flex-direction: column; }
 .app-sidebar, .app-main { transition: width .2s ease, margin-left .2s ease; }
@@ -161,7 +162,7 @@ input[type=color].form-control { padding: .25rem; height: 42px; }
    body.sidebar-collapsed .plan-card strong,
    body.sidebar-collapsed .plan-card > div,
    body.sidebar-collapsed .plan-card > span { display: none; }
-   body.sidebar-collapsed .plan-card a { display: grid; place-items: center; width: 100%; height: 36px; padding: 0; }
+   body.sidebar-collapsed .plan-card a { display: grid; place-items: center; gap: 0; width: 100%; height: 36px; padding: 0; }
    body.sidebar-collapsed .plan-card a span { display: none; }
    body.sidebar-collapsed .plan-card a i { font-size: 1rem; }
 }
@@ -273,9 +274,6 @@ input[type=color].form-control { padding: .25rem; height: 42px; }
 .dropdown-item { border-radius: 8px; padding: .45rem .75rem; font-size: .9rem; }
 .accordion { --bs-accordion-active-bg: var(--pz-primary-soft); --bs-accordion-active-color: var(--pz-primary-dark); --bs-accordion-btn-focus-box-shadow: 0 0 0 .2rem rgba(108, 92, 231, .15); }
 .btn-group > .btn.active, .btn-group > .btn.btn-light.active { background: var(--pz-primary-soft); color: var(--pz-primary); border-color: #d8d3ff !important; }
-.kpi > div:last-child { min-width: 0; }
-.kpi-value { font-size: clamp(1.1rem, 1.6vw, 1.55rem); white-space: nowrap; }
-
 /* ---------- Prontuário / receita ---------- */
 .rx-item { background: #fafaff; border: 1px solid var(--pz-border); border-radius: 12px; padding: .9rem 1rem; margin-bottom: .6rem; position: relative; }
 .rx-item .rx-num { position: absolute; top: -9px; left: 12px; background: var(--pz-primary); color: #fff; font-size: .7rem; font-weight: 700; border-radius: 999px; padding: 0 .5rem; }
