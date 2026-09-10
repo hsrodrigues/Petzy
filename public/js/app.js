@@ -25,7 +25,7 @@ function montarMenu() {
   for (const [k, r] of Object.entries(ROTAS)) {
     if (r.oculto || !pode(k)) continue;
     if (r.s !== secao) { secao = r.s; html += `<div class="nav-section">${secao}</div>`; }
-    html += `<a class="nav-link" href="#/${k}" data-rota="${k}"><i class="bi bi-${r.i}"></i>${r.t}</a>`;
+    html += `<a class="nav-link" href="#/${k}" data-rota="${k}" title="${esc(r.t)}" aria-label="${esc(r.t)}"><i class="bi bi-${r.i}"></i>${r.t}</a>`;
   }
   $('#nav').innerHTML = html;
 }
