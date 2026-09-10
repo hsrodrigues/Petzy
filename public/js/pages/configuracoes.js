@@ -273,7 +273,19 @@ export async function render(view) {
         title: 'Configuração fiscal', size: 'lg', values: { ambiente: 'homologacao', serieNfe: '1', serieNfce: '1', serieNfse: '1', ...fiscal },
         fields: [
           { type: 'section', label: 'Provedor e ambiente' },
-          { name: 'provedor', label: 'Provedor fiscal', type: 'select', options: [{ value: '', label: 'Ainda não definido' }, { value: 'nuvemfiscal', label: 'Nuvem Fiscal' }, { value: 'focusnfe', label: 'Focus NFe' }, { value: 'plugnotas', label: 'PlugNotas' }, { value: 'tecnospeed', label: 'TecnoSpeed' }, { value: 'outro', label: 'Outro provedor' }], col: 'col-md-6' },
+          { name: 'provedor', label: 'Provedor fiscal', type: 'select', options: [
+            { value: '', label: 'Ainda não definido' },
+            { value: 'nuvemfiscal', label: 'Nuvem Fiscal' },
+            { value: 'focusnfe', label: 'Focus NFe' },
+            { value: 'plugnotas', label: 'PlugNotas' },
+            { value: 'tecnospeed', label: 'TecnoSpeed' },
+            { value: 'enotas', label: 'eNotas' },
+            { value: 'webmaniabr', label: 'WebmaniaBR' },
+            { value: 'oobj', label: 'Oobj' },
+            { value: 'sefaz', label: 'SEFAZ direto' },
+            { value: 'prefeitura', label: 'Prefeitura / NFS-e municipal' },
+            { value: 'outro', label: 'Outro provedor' }
+          ], col: 'col-md-6' },
           { name: 'ambiente', label: 'Ambiente', type: 'select', options: [{ value: 'homologacao', label: 'Homologação / testes' }, { value: 'producao', label: 'Produção' }], col: 'col-md-6' },
           { type: 'section', label: 'Identificação tributária' },
           { name: 'cnpj', label: 'CNPJ do emitente', col: 'col-md-4' },
