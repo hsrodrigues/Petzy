@@ -48,7 +48,7 @@ Não há etapa de build: o diretório `public/` é servido diretamente pelo Fire
 ## Estrutura do projeto
 
 ```text
-vetflow/
+petzy/
 ├── firebase.json             # Hosting, Firestore, Storage e emuladores
 ├── firestore.rules           # isolamento por clínica e regras de licença
 ├── firestore.indexes.json    # índices compostos do Firestore
