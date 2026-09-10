@@ -1,0 +1,37 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "agendamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "inicio", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "atendimentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "petId", "order": "ASCENDING" },
+        { "fieldPath": "data", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "vacinas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "petId", "order": "ASCENDING" },
+        { "fieldPath": "dataAplicacao", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "financeiro",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tipo", "order": "ASCENDING" },
+        { "fieldPath": "vencimento", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
