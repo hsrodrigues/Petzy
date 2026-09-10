@@ -1,4 +1,4 @@
-import { list, save, remove, loadTutoresPets } from '../store.js';
+import { state, list, save, remove, loadTutoresPets } from '../store.js';
 import { $, esc, pageHeader, empty, formModal, confirmar, toast, money, fmtDate, today, badge, exportCSV, norm, debounce } from '../ui.js';
 import { exigirLicenca } from '../app.js';
 
@@ -24,7 +24,7 @@ export async function render(view) {
     ${pageHeader('Fiscal', 'Controle de NF-e, NFC-e e NFS-e da clínica',
       `<button class="btn btn-light border" id="btnCsv"><i class="bi bi-download me-1"></i>Exportar</button>
        <button class="btn btn-primary" id="btnNova"><i class="bi bi-plus-lg me-1"></i>Nova nota</button>`)}
-    <div class="alert alert-info d-flex gap-2 align-items-start mb-3"><i class="bi bi-info-circle mt-1"></i><div><strong>Emissão fiscal:</strong> este módulo organiza os documentos e está pronto para integração com SEFAZ, prefeitura ou provedor fiscal. A emissão válida depende do certificado e da autorização do órgão competente.</div></div>
+    <div class="alert alert-${state.clinica?.fiscal?.provedor ? 'success' : 'info'} d-flex gap-2 align-items-start mb-3"><i class="bi bi-${state.clinica?.fiscal?.provedor ? 'check-circle' : 'info-circle'} mt-1"></i><div><strong>Emissão fiscal:</strong> ${state.clinica?.fiscal?.provedor ? `configuração preparada para ${esc(state.clinica.fiscal.provedor)} em ${state.clinica.fiscal.ambiente === 'producao' ? 'produção' : 'homologação'}.` : 'configure o provedor em Configurações > Dados para preparar a integração.'} A emissão válida depende do certificado e da autorização do órgão competente.</div></div>
     <div class="card">
       <div class="card-header d-flex gap-2 flex-wrap align-items-center">
         <select class="form-select w-auto" id="fTipo"><option value="">Todos os tipos</option>${TIPOS.map(t => `<option value="${t.value}">${t.label}</option>`).join('')}</select>

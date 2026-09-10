@@ -128,6 +128,11 @@ export async function render(view) {
       <!-- ===== Dados ===== -->
       ${admin ? `<div class="tab-pane fade" id="tDados">
         <div class="card mb-3"><div class="card-body">
+          <h5 class="fw-bold mb-1"><i class="bi bi-receipt-cutoff text-primary me-1"></i>Integração fiscal</h5>
+          <p class="text-muted mb-3">Deixe os dados fiscais prontos para conectar um provedor de NF-e, NFC-e ou NFS-e. Tokens, certificados A1 e senhas devem ficar no Secret Manager, nunca no navegador.</p>
+          <button class="btn btn-outline-primary" id="btnFiscalConfig"><i class="bi bi-sliders me-1"></i>Configurar dados fiscais</button>
+        </div></div>
+        <div class="card mb-3"><div class="card-body">
           <h5 class="fw-bold mb-1"><i class="bi bi-shield-check text-success me-1"></i>Privacidade e LGPD</h5>
           <p class="text-muted mb-3">Exporte os dados da clínica em formato portátil para atender solicitações de acesso e mantenha o uso de dados limitado à operação do Petzy.</p>
           <button class="btn btn-outline-success" id="btnExportarLGPD"><i class="bi bi-file-earmark-lock me-1"></i>Exportar dados da clínica (JSON)</button>
@@ -262,6 +267,31 @@ export async function render(view) {
   }
 
   if (admin) {
+    $('#btnFiscalConfig', view).onclick = () => {
+      const fiscal = c.fiscal || {};
+      formModal({
+        title: 'Configuração fiscal', size: 'lg', values: { ambiente: 'homologacao', serieNfe: '1', serieNfce: '1', serieNfse: '1', ...fiscal },
+        fields: [
+          { type: 'section', label: 'Provedor e ambiente' },
+          { name: 'provedor', label: 'Provedor fiscal', type: 'select', options: [{ value: '', label: 'Ainda não definido' }, { value: 'nuvemfiscal', label: 'Nuvem Fiscal' }, { value: 'focusnfe', label: 'Focus NFe' }, { value: 'plugnotas', label: 'PlugNotas' }, { value: 'tecnospeed', label: 'TecnoSpeed' }, { value: 'outro', label: 'Outro provedor' }], col: 'col-md-6' },
+          { name: 'ambiente', label: 'Ambiente', type: 'select', options: [{ value: 'homologacao', label: 'Homologação / testes' }, { value: 'producao', label: 'Produção' }], col: 'col-md-6' },
+          { type: 'section', label: 'Identificação tributária' },
+          { name: 'cnpj', label: 'CNPJ do emitente', col: 'col-md-4' },
+          { name: 'inscricaoEstadual', label: 'Inscrição estadual', col: 'col-md-4' },
+          { name: 'inscricaoMunicipal', label: 'Inscrição municipal', col: 'col-md-4' },
+          { name: 'regimeTributario', label: 'Regime tributário', type: 'select', options: [{ value: '', label: 'Selecione' }, { value: 'simples', label: 'Simples Nacional' }, { value: 'normal', label: 'Regime normal' }, { value: 'mei', label: 'MEI' }], col: 'col-md-4' },
+          { name: 'codigoMunicipio', label: 'Código IBGE do município', col: 'col-md-4' },
+          { name: 'municipio', label: 'Município emissor', col: 'col-md-4' },
+          { type: 'section', label: 'Séries dos documentos' },
+          { name: 'serieNfe', label: 'Série NF-e', col: 'col-md-4' },
+          { name: 'serieNfce', label: 'Série NFC-e', col: 'col-md-4' },
+          { name: 'serieNfse', label: 'Série NFS-e', col: 'col-md-4' },
+          { type: 'custom', col: 'col-12', html: '<div class="alert alert-warning fs-8 mb-0"><i class="bi bi-lock me-1"></i>A chave da API, o certificado digital e a senha serão configurados posteriormente no backend/Secret Manager.</div>' }
+        ],
+        onSubmit: async (d) => { await updateDoc(doc(db, 'clinicas', state.clinicaId), { fiscal: d }); Object.assign(c, { fiscal: d }); toast('Dados fiscais salvos'); }
+      });
+    };
+
     $('#btnExportarLGPD', view).onclick = async (e) => {
       const b = e.currentTarget;
       b.disabled = true;
