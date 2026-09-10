@@ -136,6 +136,19 @@ firebase deploy
 
 O ambiente publicado está em [petzy-c8609.web.app](https://petzy-c8609.web.app).
 
+## Integração fiscal TecnoSpeed
+
+O backend da integração fica em `functions/` e nunca expõe a API key no navegador. Depois de criar a conta PlugNotas/TecnoSpeed e configurar a clínica em **Configurações > Dados > Integração fiscal**, defina o segredo diretamente no terminal:
+
+```bash
+firebase functions:secrets:set TECNOSPEED_API_KEY
+firebase deploy --only functions
+```
+
+A função `enviarDocumentoTecnoSpeed` aceita `nfe`, `nfce` e `nfse`, encaminhando o payload para a API PlugNotas. O certificado digital, o cadastro da empresa e os campos tributários devem estar configurados no ambiente TecnoSpeed. Para homologação, use as credenciais e o ambiente de testes fornecidos pelo provedor.
+
+> Nunca coloque a API key, o certificado A1 ou a senha no `public/`, no Firestore ou no código do navegador. A emissão só deve ser liberada depois de validar o payload e as regras fiscais com o contador.
+
 ## Licenciamento e cobrança
 
 - Novas clínicas começam com **14 dias de teste grátis** (`status: trial`).
