@@ -2,6 +2,11 @@
 
 > Gestão completa para clínicas veterinárias e petshops.
 
+[![Status](https://img.shields.io/badge/status-online-2ea44f?style=flat-square)](https://petzy-c8609.web.app)
+[![Firebase](https://img.shields.io/badge/Firebase-hosting--first-ffca28?style=flat-square&logo=firebase&logoColor=1a1a1a)](https://firebase.google.com/)
+[![JavaScript](https://img.shields.io/badge/JavaScript-ES_modules-f7df1e?style=flat-square&logo=javascript&logoColor=1a1a1a)](https://developer.mozilla.org/docs/Web/JavaScript/Guide/Modules)
+[![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-7952b3?style=flat-square&logo=bootstrap&logoColor=white)](https://getbootstrap.com/)
+
 [Acessar o Petzy](https://petzy-c8609.web.app) · teste grátis por 14 dias
 
 O Petzy é um SaaS multi-clínica para centralizar atendimento, operação e cobrança em um só lugar. Cada clínica possui seus próprios dados, usuários, permissões e licença de uso.
