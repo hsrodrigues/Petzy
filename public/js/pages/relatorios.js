@@ -1,5 +1,5 @@
-import { list, loadTutoresPets, where } from '../store.js';
-import { $, esc, pageHeader, money, num, kpi, today, toISODate, addDays, fmtDate, exportCSV, empty } from '../ui.js';
+import { state, list, loadTutoresPets, where } from '../store.js';
+import { $, esc, pageHeader, money, num, kpi, today, toISODate, addDays, fmtDate, exportCSV, empty, toast } from '../ui.js';
 
 let charts = [];
 
@@ -16,10 +16,13 @@ export async function render(view) {
         </select>
         <input type="date" class="form-control w-auto" id="ini"><input type="date" class="form-control w-auto" id="fim">
         <button class="btn btn-light border" id="btnCsv"><i class="bi bi-download me-1"></i>CSV</button>
+        <button class="btn btn-outline-primary" id="btnGerencial"><i class="bi bi-file-earmark-pdf me-1"></i>Relatório PDF</button>
+        <button class="btn btn-primary" id="btnDre"><i class="bi bi-file-earmark-bar-graph me-1"></i>DRE para contador</button>
       </div>`)}
     <div id="conteudo"></div>`;
 
   let exportRows = [];
+  let relatorioAtual = null;
 
   function aplicarPreset() {
     const p = $('#preset', view).value, h = new Date();
@@ -62,6 +65,17 @@ export async function render(view) {
     const topCli = Object.entries(cli).sort((a, b) => b[1] - a[1]).slice(0, 8);
 
     exportRows = top.map(([nome, r]) => ({ Item: nome, Tipo: r.tipo, Quantidade: r.qtd, Total: r.total.toFixed(2).replace('.', ',') }));
+    const porCategoria = (tipo, somentePagos = true) => fin.filter(f => f.tipo === tipo && (!somentePagos || f.pago)).reduce((acc, f) => {
+      const chave = f.categoria || 'Outros';
+      acc[chave] = (acc[chave] || 0) + (Number(f.valor) || 0);
+      return acc;
+    }, {});
+    relatorioAtual = {
+      ini, fim, receita, despesa, resultado: receita - despesa, brutoVendas, custoVendido, ticket,
+      concl, faltas, novosClientes, vendas: vOk.length, fiado: fin.filter(f => f.tipo === 'receita' && !f.pago && f.formaPagamento === 'Fiado (a receber)').reduce((s, f) => s + (f.valor || 0), 0),
+      receitasCategoria: porCategoria('receita'), despesasCategoria: porCategoria('despesa'), top, topCli: topCli.map(([id, valor]) => ({ nome: C[id]?.nome || '—', valor })),
+      clinica: state.clinica || {}
+    };
 
     $('#conteudo', view).innerHTML = `
       <div class="row g-3 mb-3">
@@ -107,9 +121,44 @@ export async function render(view) {
     }
   }
 
+  const linhas = (obj, negativo = false) => Object.entries(obj).sort((a, b) => b[1] - a[1]).map(([nome, valor]) => `<tr><td>${esc(nome)}</td><td class="num ${negativo ? 'negativo' : ''}">${negativo ? '− ' : ''}${money(valor)}</td></tr>`).join('');
+  const tabelaItens = (itens) => itens.length ? itens.map(([nome, r], i) => `<tr><td>${i + 1}</td><td>${esc(nome)}</td><td class="num">${num(r.qtd)}</td><td class="num">${money(r.total)}</td></tr>`).join('') : '<tr><td colspan="4" class="muted">Nenhum item no período.</td></tr>';
+
+  function abrirRelatorio(tipo) {
+    if (!relatorioAtual) return toast('Aguarde o carregamento dos dados.', 'warning');
+    const r = relatorioAtual, c = r.clinica;
+    const titulo = tipo === 'dre' ? 'DRE simplificada' : 'Relatório gerencial';
+    const subtitulo = `Período de ${fmtDate(r.ini)} a ${fmtDate(r.fim)}`;
+    const corpo = tipo === 'dre' ? `
+      <div class="alerta"><strong>Documento gerencial:</strong> DRE simplificada em regime de caixa. Não substitui a escrituração contábil ou fiscal do contador.</div>
+      <h2>Demonstração do resultado</h2>
+      <table><thead><tr><th>Descrição</th><th class="num">Valor</th></tr></thead><tbody>
+        <tr class="grupo"><td>Receita operacional recebida</td><td class="num">${money(r.receita)}</td></tr>
+        ${linhas(r.receitasCategoria)}
+        <tr class="grupo"><td>(−) Despesas pagas</td><td class="num negativo">− ${money(r.despesa)}</td></tr>
+        ${linhas(r.despesasCategoria, true)}
+        <tr class="total"><td>Resultado operacional do período</td><td class="num ${r.resultado < 0 ? 'negativo' : ''}">${money(r.resultado)}</td></tr>
+      </tbody></table>
+      <h2>Informações complementares</h2>
+      <div class="metricas"><div><small>Vendas PDV</small><strong>${r.vendas}</strong></div><div><small>Vendas fiadas em aberto</small><strong>${money(r.fiado)}</strong></div><div><small>Margem bruta PDV</small><strong>${r.brutoVendas ? num(((r.brutoVendas - r.custoVendido) / r.brutoVendas) * 100, 1) : 0}%</strong></div></div>
+      <p class="muted nota">Valores extraídos do módulo financeiro do Petzy. Confira classificações, impostos, custos e documentos fiscais com o responsável contábil.</p>` : `
+      <div class="metricas"><div><small>Receita recebida</small><strong>${money(r.receita)}</strong></div><div><small>Despesas pagas</small><strong>${money(r.despesa)}</strong></div><div><small>Resultado</small><strong>${money(r.resultado)}</strong></div><div><small>Ticket médio</small><strong>${money(r.ticket)}</strong></div></div>
+      <h2>Indicadores do período</h2><table><tbody><tr><td>Vendas concluídas</td><td class="num">${r.vendas}</td></tr><tr><td>Atendimentos concluídos</td><td class="num">${r.concl}</td></tr><tr><td>Faltas</td><td class="num">${r.faltas}</td></tr><tr><td>Novos tutores</td><td class="num">${r.novosClientes}</td></tr><tr><td>Vendas fiadas em aberto</td><td class="num">${money(r.fiado)}</td></tr></tbody></table>
+      <h2>Itens mais vendidos</h2><table><thead><tr><th>#</th><th>Item</th><th class="num">Quantidade</th><th class="num">Total</th></tr></thead><tbody>${tabelaItens(r.top)}</tbody></table>
+      <h2>Receitas e despesas por categoria</h2><div class="duas"><div><h3>Receitas</h3><table>${linhas(r.receitasCategoria)}</table></div><div><h3>Despesas</h3><table>${linhas(r.despesasCategoria, true)}</table></div></div>`;
+    const w = window.open('', '_blank');
+    if (!w) return toast('Permita pop-ups para gerar o relatório.', 'warning');
+    w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(titulo)} - ${esc(c.nome || 'Petzy')}</title><style>
+      @page{size:A4;margin:14mm}*{box-sizing:border-box}body{font:12px Arial,sans-serif;color:#202335;margin:0}header{border-bottom:3px solid #6c5ce7;padding-bottom:12px;display:flex;justify-content:space-between;gap:20px}h1{font-size:22px;margin:0 0 4px;color:#3d2fb8}h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:#3d2fb8;border-bottom:1px solid #e5e6ef;padding-bottom:5px;margin:22px 0 8px}h3{font-size:11px;margin:0 0 6px;color:#555}p{line-height:1.5}.muted{color:#73788d}.num{text-align:right;white-space:nowrap}.negativo{color:#b42318}.alerta{background:#fff8e1;border-left:4px solid #f59e0b;padding:9px 12px;margin:18px 0;color:#684f00}.metricas{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}.metricas div{border:1px solid #e3e4ee;border-radius:7px;padding:10px}.metricas small{display:block;color:#73788d;margin-bottom:4px}.metricas strong{font-size:16px}.duas{display:grid;grid-template-columns:1fr 1fr;gap:18px}table{width:100%;border-collapse:collapse;margin-bottom:10px}th,td{border-bottom:1px solid #e5e6ef;padding:6px 7px;text-align:left}th{font-size:10px;text-transform:uppercase;color:#73788d;background:#fafaff}.grupo td{font-weight:700;background:#fafaff}.total td{font-weight:700;border-top:2px solid #6c5ce7;font-size:13px}.nota{font-size:10px;margin-top:20px}footer{border-top:1px solid #e5e6ef;margin-top:28px;padding-top:8px;color:#73788d;font-size:10px;display:flex;justify-content:space-between}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+    </style></head><body><header><div><h1>${esc(c.nome || 'Petzy')}</h1><div class="muted">${esc([c.cnpj && 'CNPJ ' + c.cnpj, c.endereco, c.telefone, c.email].filter(Boolean).join(' · '))}</div></div><div class="num"><strong>${titulo}</strong><br>${subtitulo}</div></header>${corpo}<footer><span>Emitido pelo Petzy</span><span>${new Date().toLocaleString('pt-BR')}</span></footer><script>window.onload=()=>window.print()<\/script></body></html>`);
+    w.document.close();
+  }
+
   $('#preset', view).onchange = () => { aplicarPreset(); carregar(); };
   $('#ini', view).onchange = $('#fim', view).onchange = () => { $('#preset', view).value = 'custom'; carregar(); };
   $('#btnCsv', view).onclick = () => exportCSV('relatorio-itens.csv', exportRows);
+  $('#btnGerencial', view).onclick = () => abrirRelatorio('gerencial');
+  $('#btnDre', view).onclick = () => abrirRelatorio('dre');
 
   aplicarPreset();
   await carregar();
