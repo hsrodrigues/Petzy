@@ -32,7 +32,7 @@ googleProvider.setCustomParameters({ prompt: 'select_account' });
 isSupported().then(ok => ok && getAnalytics(app)).catch(() => {});
 
 export {
-  initializeApp, deleteApp, firebaseConfig, app, getFunctions, httpsCallable,
+  initializeApp, deleteApp, firebaseConfig, getFunctions, httpsCallable,
   onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   signOut, sendPasswordResetEmail, updateProfile, signInWithPopup, GoogleAuthProvider, getAuth, connectAuthEmulator,
   collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
