@@ -10,6 +10,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import { getStorage, connectStorageEmulator, ref, uploadBytes, getDownloadURL, deleteObject } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js';
 import { getAnalytics, isSupported } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js';
+import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js';
 import { firebaseConfig } from './config.js';
 
 export const app = initializeApp(firebaseConfig);
@@ -31,7 +32,7 @@ googleProvider.setCustomParameters({ prompt: 'select_account' });
 isSupported().then(ok => ok && getAnalytics(app)).catch(() => {});
 
 export {
-  initializeApp, deleteApp, firebaseConfig,
+  initializeApp, deleteApp, firebaseConfig, app, getFunctions, httpsCallable,
   onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   signOut, sendPasswordResetEmail, updateProfile, signInWithPopup, GoogleAuthProvider, getAuth, connectAuthEmulator,
   collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,

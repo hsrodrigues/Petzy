@@ -2,6 +2,7 @@ const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { defineSecret, defineString } = require('firebase-functions/params');
+const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
 
 initializeApp();
 const db = getFirestore();
@@ -9,8 +10,32 @@ const tecnospeedApiKey = defineSecret('TECNOSPEED_API_KEY');
 const tecnospeedBaseUrl = defineString('TECNOSPEED_API_BASE_URL', {
   default: 'https://api.plugnotas.com.br'
 });
+const secretManager = new SecretManagerServiceClient();
 
 const endpoints = { nf: 'nfe', nfe: 'nfe', nfce: 'nfce', nfse: 'nfse' };
+
+exports.configurarTokenTecnoSpeed = onCall({
+  region: 'southamerica-east1',
+  timeoutSeconds: 30,
+  memory: '256MiB'
+}, async request => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Faça login para configurar o token.');
+  const perfilSnap = await db.doc(`usuarios/${request.auth.uid}`).get();
+  const perfil = perfilSnap.data();
+  if (!perfil?.clinicaId || perfil.papel !== 'admin') throw new HttpsError('permission-denied', 'Apenas o administrador pode configurar o token.');
+  const token = String(request.data?.token || '').trim();
+  if (token.length < 10 || token.length > 500) throw new HttpsError('invalid-argument', 'Token TecnoSpeed inválido.');
+
+  const projectId = process.env.GCLOUD_PROJECT;
+  const secretName = `projects/${projectId}/secrets/TECNOSPEED_API_KEY`;
+  try {
+    await secretManager.getSecret({ name: secretName });
+  } catch (error) {
+    await secretManager.createSecret({ parent: `projects/${projectId}`, secretId: 'TECNOSPEED_API_KEY', secret: { replication: { automatic: {} } } });
+  }
+  await secretManager.addSecretVersion({ parent: secretName, payload: { data: Buffer.from(token, 'utf8') } });
+  return { ok: true };
+});
 
 function assertPayload(data) {
   if (!data || typeof data !== 'object' || !data.tipo || !data.payload || typeof data.payload !== 'object') {

@@ -1,7 +1,7 @@
 import { state, list, ref, where, PAPEIS, PLANOS, MODULOS, db, writeBatch, col } from '../store.js';
 import {
   doc, setDoc, updateDoc, initializeApp, deleteApp, getAuth, createUserWithEmailAndPassword, signOut, firebaseConfig,
-  storage, ref as sRef, uploadBytes, getDownloadURL, deleteObject, emulador, connectAuthEmulator
+  storage, ref as sRef, uploadBytes, getDownloadURL, deleteObject, emulador, connectAuthEmulator, app, getFunctions, httpsCallable
 } from '../firebase.js';
 import { $, esc, pageHeader, formModal, toast, confirmar, modal, initials, badge, mask, toISODate, toISODateTime, addDays, comprimirImagem } from '../ui.js';
 import { recarregarClinica, exigirLicenca } from '../app.js';
@@ -130,7 +130,8 @@ export async function render(view) {
         <div class="card mb-3"><div class="card-body">
           <h5 class="fw-bold mb-1"><i class="bi bi-receipt-cutoff text-primary me-1"></i>Integração fiscal</h5>
           <p class="text-muted mb-3">Deixe os dados fiscais prontos para conectar um provedor de NF-e, NFC-e ou NFS-e. Tokens, certificados A1 e senhas devem ficar no Secret Manager, nunca no navegador.</p>
-          <button class="btn btn-outline-primary" id="btnFiscalConfig"><i class="bi bi-sliders me-1"></i>Configurar dados fiscais</button>
+          <div class="d-flex gap-2 flex-wrap"><button class="btn btn-outline-primary" id="btnFiscalConfig"><i class="bi bi-sliders me-1"></i>Configurar dados fiscais</button>
+          <button class="btn btn-primary" id="btnFiscalToken"><i class="bi bi-key me-1"></i>Configurar token TecnoSpeed</button></div>
         </div></div>
         <div class="card mb-3"><div class="card-body">
           <h5 class="fw-bold mb-1"><i class="bi bi-shield-check text-success me-1"></i>Privacidade e LGPD</h5>
@@ -267,6 +268,20 @@ export async function render(view) {
   }
 
   if (admin) {
+    $('#btnFiscalToken', view).onclick = () => formModal({
+      title: 'Token TecnoSpeed', size: 'md',
+      fields: [
+        { name: 'token', label: 'API key do PlugNotas/TecnoSpeed', type: 'password', required: true, col: 'col-12', attrs: 'autocomplete="new-password" minlength="10"' },
+        { type: 'custom', col: 'col-12', html: '<div class="alert alert-warning fs-8 mb-0"><i class="bi bi-shield-lock me-1"></i>O token será enviado diretamente ao backend e gravado no Secret Manager. Ele não será salvo no Firestore nem no navegador.</div>' }
+      ],
+      onSubmit: async (d, form) => {
+        const fn = httpsCallable(getFunctions(app, 'southamerica-east1'), 'configurarTokenTecnoSpeed');
+        await fn({ token: d.token });
+        form.elements.token.value = '';
+        toast('Token TecnoSpeed configurado com segurança');
+      }
+    });
+
     $('#btnFiscalConfig', view).onclick = () => {
       const fiscal = c.fiscal || {};
       formModal({
