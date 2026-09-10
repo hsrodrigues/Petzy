@@ -24,6 +24,7 @@ export async function render(view) {
         <input type="month" class="form-control w-auto" id="mes">
         <select class="form-select w-auto" id="fTipo"><option value="">Receitas e despesas</option><option value="receita">Só receitas</option><option value="despesa">Só despesas</option></select>
         <select class="form-select w-auto" id="fStatus"><option value="">Todos</option><option value="pago">Pagos</option><option value="aberto">Em aberto</option><option value="vencido">Vencidos</option></select>
+        <select class="form-select w-auto" id="fOrigem"><option value="">Todos os lançamentos</option><option value="fiado">Fiado em aberto</option></select>
         <input class="form-control ms-auto" style="max-width:240px" id="busca" placeholder="Buscar descrição...">
       </div>
       <div class="table-responsive"><table class="table table-hover">
@@ -35,9 +36,14 @@ export async function render(view) {
   $('#mes', view).value = mes;
 
   async function carregar() {
-    const [a, m] = mes.split('-').map(Number);
-    const prox = `${m === 12 ? a + 1 : a}-${String(m === 12 ? 1 : m + 1).padStart(2, '0')}-01`;
-    lancs = await list('financeiro', where('vencimento', '>=', mes + '-01'), where('vencimento', '<', prox));
+    if ($('#fOrigem', view).value === 'fiado') {
+      lancs = (await list('financeiro', where('origem', '==', 'venda')))
+        .filter(l => l.tipo === 'receita' && l.formaPagamento === 'Fiado (a receber)' && !l.pago);
+    } else {
+      const [a, m] = mes.split('-').map(Number);
+      const prox = `${m === 12 ? a + 1 : a}-${String(m === 12 ? 1 : m + 1).padStart(2, '0')}-01`;
+      lancs = await list('financeiro', where('vencimento', '>=', mes + '-01'), where('vencimento', '<', prox));
+    }
     desenhar();
   }
 
@@ -103,7 +109,9 @@ export async function render(view) {
 
   view.querySelectorAll('[data-novo]').forEach(b => b.onclick = () => abrirForm({ tipo: b.dataset.novo }));
   $('#mes', view).onchange = (e) => { mes = e.target.value || today().slice(0, 7); carregar(); };
-  ['#fTipo', '#fStatus'].forEach(s => $(s, view).onchange = desenhar);
+  $('#fTipo', view).onchange = desenhar;
+  $('#fStatus', view).onchange = desenhar;
+  $('#fOrigem', view).onchange = carregar;
   $('#busca', view).addEventListener('input', debounce(desenhar, 150));
   $('#btnCsv', view).onclick = () => exportCSV(`financeiro-${mes}.csv`, lancs.map(l => ({
     Vencimento: l.vencimento, Tipo: l.tipo, Descricao: l.descricao, Categoria: l.categoria, Forma: l.formaPagamento,
