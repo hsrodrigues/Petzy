@@ -1,116 +1,164 @@
 # 🐾 Petzy
 
-**🌐 Acesse: [petzy-c8609.web.app](https://petzy-c8609.web.app)** · teste grátis por 14 dias
+> Gestão completa para clínicas veterinárias e petshops.
 
-SaaS para **clínicas veterinárias e petshops**, feito com HTML, CSS, JavaScript puro, Bootstrap 5 e Firebase (Authentication e Firestore). É multi-clínica: cada clínica que se cadastra tem os dados isolados das demais e paga uma **licença mensal**.
+[Acessar o Petzy](https://petzy-c8609.web.app) · teste grátis por 14 dias
 
-## Módulos
+O Petzy é um SaaS multi-clínica para centralizar atendimento, operação e cobrança em um só lugar. Cada clínica possui seus próprios dados, usuários, permissões e licença de uso.
 
-| Módulo | O que faz |
-|---|---|
-| Dashboard | KPIs do dia, receitas x despesas, agenda de hoje, vacinas a vencer, estoque baixo, aniversariantes |
-| Agenda | Visão semanal, filtro por profissional, conflito de horário, status, confirmação por WhatsApp, faturamento ao concluir |
-| Tutores | Cadastro com busca de endereço por CEP (ViaCEP), máscaras, exportação para CSV |
-| Pets | Ficha com foto, alertas de alergia, histórico clínico, vacinas e agendamentos |
-| Prontuários | Sinais vitais, anamnese, diagnóstico, prescrição, impressão de receita e prontuário |
-| Vacinas | Carteira de vacinação, cálculo do reforço, lista de atrasados, lembrete por WhatsApp |
-| PDV | Venda de produtos e serviços, leitor de código de barras, troco, fiado, cupom, baixa de estoque |
-| Produtos & Serviços | Catálogo, margem, estoque mínimo, movimentações de entrada, saída e ajuste |
-| Financeiro | Contas a pagar e a receber, recorrência, baixa, fluxo mensal |
-| Relatórios | Receita por dia, ticket médio, taxa de faltas, top itens, melhores clientes |
-| Configurações | Dados da clínica, horário da agenda, equipe com funções, dados de demonstração |
-| Assinatura | Plano atual, validade, pagamento por PIX ou link, histórico de faturas |
-| Painel SaaS (`admin.html`) | Só para o dono do Petzy: todas as clínicas, MRR, confirmação de pagamentos, bloqueio |
+## Visão geral
 
-## Estrutura
+- **Atendimento:** agenda, tutores, pets, prontuários e vacinas.
+- **Operação:** PDV, produtos, serviços, estoque e documentos.
+- **Gestão:** financeiro, relatórios, configurações e indicadores do dashboard.
+- **SaaS:** planos, período de teste, assinaturas, pagamentos PIX e painel administrativo.
 
-```
+## Recursos
+
+| Módulo | Principais recursos |
+| --- | --- |
+| Dashboard | KPIs, receita x despesas, agenda do dia, vacinas a vencer e estoque baixo |
+| Agenda | Visão semanal, profissionais, conflitos, status, WhatsApp e faturamento |
+| Tutores | Cadastro, busca de endereço por CEP, máscaras e exportação para CSV |
+| Pets | Ficha, foto, alergias, histórico clínico, vacinas e agendamentos |
+| Prontuários | Sinais vitais, anamnese, diagnóstico, prescrição e impressão |
+| Vacinas | Carteira, cálculo de reforço, atrasados e lembretes por WhatsApp |
+| PDV | Produtos e serviços, código de barras, troco, fiado, cupom e estoque |
+| Produtos e serviços | Catálogo, margem, estoque mínimo e movimentações |
+| Financeiro | Contas a pagar e receber, recorrência, baixas e fluxo mensal |
+| Relatórios | Receita diária, ticket médio, faltas, itens mais vendidos e clientes |
+| Documentos | Geração e organização de documentos operacionais da clínica |
+| Assinatura | Plano, validade, pagamentos PIX ou link e histórico de faturas |
+| Painel administrativo | Clínicas, MRR, confirmações de pagamento e bloqueios |
+
+## Stack
+
+- HTML, CSS e JavaScript moderno com módulos ES.
+- Bootstrap 5 e Bootstrap Icons via CDN.
+- Firebase Authentication, Firestore, Hosting e Storage Rules.
+- Firebase CLI para desenvolvimento local e publicação.
+
+Não há etapa de build: o diretório `public/` é servido diretamente pelo Firebase Hosting.
+
+## Estrutura do projeto
+
+```text
 vetflow/
-├── firebase.json             # Hosting + Firestore + Storage
-├── .firebaserc               # projeto petzy-c8609
-├── firestore.rules           # segurança multi-clínica + licença
-├── firestore.indexes.json
-├── storage.rules
+├── firebase.json             # Hosting, Firestore, Storage e emuladores
+├── firestore.rules           # isolamento por clínica e regras de licença
+├── firestore.indexes.json    # índices compostos do Firestore
+├── storage.rules             # regras do Storage
 └── public/
-    ├── index.html            # landing page
-    ├── login.html            # login (e-mail/senha e Google) + cadastro da clínica
-    ├── app.html              # painel (SPA com rotas por hash)
-    ├── admin.html            # painel do dono do SaaS
-    ├── pagar.html            # página pública de pagamento (QR Code PIX)
-    ├── assets/css/style.css
-    └── js/
-        ├── config.js         # credenciais web do Firebase
-        ├── firebase.js       # SDK v10 via CDN
-        ├── store.js          # dados, sessão, permissões, planos e licença
-        ├── ui.js             # modais, formulários, toasts, máscaras, formatação
-        ├── pix.js            # PIX copia e cola (BR Code) + QR Code
-        ├── app.js            # menu, roteador, barra de licença
-        └── pages/*.js        # uma tela por arquivo
+     ├── index.html            # landing page
+     ├── login.html            # login e cadastro da clínica
+     ├── app.html              # painel principal (SPA)
+     ├── admin.html            # painel do dono do SaaS
+     ├── pagar.html            # página pública de cobrança PIX
+     ├── assets/               # estilos e imagens
+     └── js/
+          ├── config.js         # configuração pública do Firebase
+          ├── firebase.js       # inicialização do SDK
+          ├── store.js          # dados, sessão, permissões e planos
+          ├── ui.js             # componentes e utilitários de interface
+          ├── pix.js            # BR Code, PIX copia e cola e QR Code
+          ├── docs.js           # geração de documentos
+          ├── documentos.js     # fluxo de documentos da clínica
+          ├── app.js            # menu, roteamento e licença
+          └── pages/             # telas do painel
 ```
 
-## Configuração do Firebase (uma única vez)
+## Pré-requisitos
+
+- Node.js e npm, para instalar a Firebase CLI.
+- Uma conta no Firebase com acesso ao projeto.
+- Um servidor HTTP local. Abrir os arquivos diretamente no navegador não funciona porque o app usa módulos ES.
+
+## Configuração do Firebase
 
 No [Console do Firebase](https://console.firebase.google.com/project/petzy-c8609):
 
-1. **Authentication > Sign-in method**: ative **E-mail/senha** e **Google**.
-2. **Authentication > Settings > Authorized domains**: confira se `localhost` está na lista. Quando publicar, o domínio `petzy-c8609.web.app` já entra automaticamente.
-3. **Firestore Database**: crie o banco no modo **produção** (região `southamerica-east1`, São Paulo).
-4. Publique as regras e os índices:
-   ```bash
-   npm install -g firebase-tools
-   firebase login
-   firebase deploy --only firestore
-   ```
+1. Em **Authentication > Sign-in method**, ative **E-mail/senha** e **Google**.
+2. Em **Authentication > Settings > Authorized domains**, confirme `localhost` e os domínios de produção.
+3. Crie o Firestore em modo produção, preferencialmente na região `southamerica-east1`.
+4. Instale a CLI e autentique-se:
 
-## Rodar localmente
+    ```bash
+    npm install -g firebase-tools
+    firebase login
+    ```
 
-Os módulos ES precisam de um servidor HTTP. Abrir o arquivo direto no navegador não funciona. Use uma destas opções:
+5. Publique regras e índices:
+
+    ```bash
+    firebase deploy --only firestore,storage
+    ```
+
+As credenciais web em `public/js/config.js` são públicas por design. O isolamento e a proteção dos dados devem ser mantidos nas regras do Firestore e do Storage.
+
+## Desenvolvimento local
+
+Para servir o frontend com o Firebase Hosting:
 
 ```bash
-firebase serve --only hosting     # http://localhost:5000
-# ou
+firebase serve --only hosting
+```
+
+A aplicação ficará disponível em `http://localhost:5000`.
+
+Alternativas para testar apenas o frontend:
+
+```bash
 npx serve public
-# ou a extensão "Live Server" do VS Code, abrindo public/index.html
 ```
 
-## Publicar
+Também é possível usar a extensão **Live Server** do VS Code abrindo `public/index.html`.
+
+### Emuladores do Firebase
+
+O projeto já possui portas configuradas para Auth, Firestore, Storage e Hosting. Para iniciar os emuladores:
 
 ```bash
-firebase deploy                   # hosting + regras
+firebase emulators:start
 ```
 
-O sistema fica em **https://petzy-c8609.web.app**.
+## Publicação
 
-## Licença mensal (como funciona)
+Depois de validar localmente:
 
-- Toda clínica nova começa em **teste grátis de 14 dias** (`status: trial`).
-- A validade fica em `clinicas/{id}.validoAteMs`. **As regras do Firestore bloqueiam gravações** quando a licença vence ou a clínica é bloqueada. Os dados continuam visíveis em modo somente leitura.
-- A clínica **não consegue alterar** o próprio plano ou a validade. Só o superadmin consegue.
-- Planos e preços ficam em `PLANOS`, no arquivo `public/js/store.js`. Esse é o único lugar a editar, e a landing page, o app e o painel usam esses valores.
+```bash
+firebase deploy
+```
 
-### Tornar-se superadmin (dono do SaaS)
+O ambiente publicado está em [petzy-c8609.web.app](https://petzy-c8609.web.app).
 
-1. Crie sua conta normalmente em `login.html`.
-2. No Console, em **Authentication > Users**, copie o seu **UID**.
-3. No **Firestore**, crie a coleção `superadmins` com um documento cujo ID é o seu UID. O conteúdo pode ser qualquer um, por exemplo `{ "nome": "Hudson" }`.
-4. Acesse `admin.html`. Aparece também um atalho no menu do usuário.
+## Licenciamento e cobrança
 
-No painel, clique em **Formas de pagamento** para cadastrar a chave PIX, o WhatsApp de suporte e os links de pagamento recorrente de cada plano (Mercado Pago, Asaas, Stripe...).
+- Novas clínicas começam com **14 dias de teste grátis** (`status: trial`).
+- A validade fica em `clinicas/{id}.validoAteMs`.
+- Quando a licença vence ou a clínica é bloqueada, as regras impedem novas gravações; os dados continuam disponíveis em modo somente leitura.
+- Apenas o superadmin pode alterar o plano ou a validade da clínica.
+- Planos e preços são definidos em `PLANOS`, no arquivo `public/js/store.js`.
 
-### Fluxo de cobrança
+### Configurar o superadmin
 
-1. A clínica vai em **Assinatura**, escolhe o plano e o período (1, 3, 6 ou 12 meses) e paga pelo **QR Code PIX** gerado com o valor exato, pelo **PIX copia e cola** ou pelo link de cartão/boleto.
-2. Ela clica em **"Já paguei"**, e isso cria um documento em `solicitacoes`.
-3. Você confirma no `admin.html`. A licença é renovada e a fatura entra no histórico da clínica.
+1. Crie uma conta normalmente em `login.html`.
+2. Copie o UID em **Authentication > Users**, no Console do Firebase.
+3. Crie em `superadmins` um documento cujo ID seja esse UID. O conteúdo pode ser, por exemplo, `{ "nome": "Administrador" }`.
+4. Acesse `admin.html`.
 
-Você também pode cobrar ativamente. No `admin.html`, o botão **Cobrar** de cada clínica gera o QR Code PIX e um **link de pagamento** (`pagar.html`) para enviar pelo WhatsApp. A página do link é pública e funciona sem login.
+No painel administrativo, configure a chave PIX, o WhatsApp de suporte e os links de pagamento de cada plano em **Formas de pagamento**.
 
-O QR Code segue o padrão BR Code do Banco Central (PIX estático com valor) e é gerado no navegador, sem taxa de intermediário. Configure em **Formas de pagamento** a chave PIX, o nome do favorecido (até 25 caracteres) e a cidade (até 15).
+O fluxo de cobrança é:
 
-> **Próximo passo opcional:** automatizar a confirmação com webhook (Cloud Functions + Mercado Pago ou Asaas). Isso exige o plano **Blaze** do Firebase.
+1. A clínica escolhe um plano e um período de 1, 3, 6 ou 12 meses em **Assinatura**.
+2. O pagamento pode ser feito por QR Code PIX, PIX copia e cola ou link de cartão/boleto.
+3. Ao clicar em **Já paguei**, a clínica cria uma solicitação.
+4. O superadmin confirma o pagamento em `admin.html`, renova a licença e registra a fatura.
 
-## Observações
+O botão **Cobrar** gera um QR Code PIX e um link público em `pagar.html`. A confirmação automática por webhook é uma evolução futura que exige Cloud Functions e o plano Blaze do Firebase.
 
-- As fotos dos pets são redimensionadas no navegador e salvas no próprio documento. Assim o sistema funciona no **plano gratuito (Spark)**, sem precisar do Cloud Storage.
-- Para adicionar um membro da equipe, o app usa uma instância secundária do Firebase Auth, e o admin continua logado.
-- A `apiKey` web do Firebase é pública por design. A segurança real está no `firestore.rules`.
+## Decisões importantes
+
+- Fotos de pets são redimensionadas no navegador e salvas no documento para manter o projeto compatível com o plano Spark.
+- O cadastro de membros da equipe usa uma instância secundária do Firebase Auth para manter o administrador conectado.
+- A segurança real está nas regras do Firestore e do Storage, não na ocultação da configuração web.
