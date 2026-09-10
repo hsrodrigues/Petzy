@@ -83,7 +83,7 @@ export async function render(view, { params }) {
       title: v.id ? 'Editar aplicação' : 'Registrar aplicação',
       values: { dataAplicacao: hoje, veterinario: state.perfil.nome, ...v },
       fields: [
-        { name: 'petId', label: 'Pet', type: 'select', required: true, options: petOptions(dados.pets, C), col: 'col-12' },
+        { name: 'petId', label: 'Pet', type: 'select', required: true, search: true, options: petOptions(dados.pets, C), col: 'col-12' },
         { name: 'nome', label: 'Vacina / medicamento', required: true, col: 'col-md-8', attrs: 'list="listaVac"' },
         { name: 'dose', label: 'Dose', type: 'select', options: ['1ª dose', '2ª dose', '3ª dose', 'Reforço anual', 'Dose única'], col: 'col-md-4' },
         { type: 'custom', col: 'd-none', html: `<datalist id="listaVac">${VACINAS.map(x => `<option value="${x}">`).join('')}</datalist>` },

@@ -1,36 +1,22 @@
 import { list, save, remove, get, update, loadTutoresPets, where } from '../store.js';
-import { $, esc, pageHeader, empty, formModal, confirmar, toast, idade, fmtDate, fmtDateTime, norm, debounce, badge, money } from '../ui.js';
+import { $, esc, pageHeader, empty, formModal, confirmar, toast, idade, fmtDate, fmtDateTime, norm, debounce, badge, money, comprimirImagem } from '../ui.js';
 import { exigirLicenca } from '../app.js';
 import { abrirFormCliente } from './clientes.js';
+import { gerarDocumento, menuDocs } from '../documentos.js';
 
 export const ESPECIES = ['Cão', 'Gato', 'Ave', 'Roedor', 'Réptil', 'Coelho', 'Outro'];
 const EMOJI = { 'Cão': '🐶', 'Gato': '🐱', 'Ave': '🦜', 'Roedor': '🐹', 'Réptil': '🦎', 'Coelho': '🐰' };
 export const emoji = (e) => EMOJI[e] || '🐾';
 
 // <option>s "Pet — Tutor" usados em vários formulários
-export const petOptions = (pets, C) => pets.map(p => ({ value: p.id, label: `${emoji(p.especie)} ${p.nome} — ${C[p.clienteId]?.nome || 'sem tutor'}` }));
+export const petOptions = (pets, C) => pets.map(p => ({
+  value: p.id, label: `${emoji(p.especie)} ${p.nome} — ${C[p.clienteId]?.nome || 'sem tutor'}`,
+  busca: [p.raca, p.microchip, C[p.clienteId]?.telefone, C[p.clienteId]?.cpf].filter(Boolean).join(' ')
+}));
 
 export const fotoPet = (p, cls = '') => p.foto
   ? `<img src="${p.foto}" class="${cls}" alt="${esc(p.nome)}" style="object-fit:cover">`
   : `<div class="${cls} d-grid" style="place-items:center;background:linear-gradient(135deg,#efedff,#e3f8f2)">${emoji(p.especie)}</div>`;
-
-// Reduz a imagem para ~400px e guarda como data URL no próprio documento
-// (funciona no plano gratuito do Firebase, sem precisar do Storage)
-function comprimirImagem(file, max = 400) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const s = Math.min(1, max / Math.max(img.width, img.height));
-      const c = document.createElement('canvas');
-      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      resolve(c.toDataURL('image/jpeg', 0.78));
-      URL.revokeObjectURL(img.src);
-    };
-    img.onerror = reject;
-    img.src = URL.createObjectURL(file);
-  });
-}
 
 export function abrirFormPet(pet = {}, { clientes, C }, onSaved) {
   if (!exigirLicenca()) return;
@@ -43,8 +29,8 @@ export function abrirFormPet(pet = {}, { clientes, C }, onSaved) {
         <div class="text-muted fs-8">JPG ou PNG. A imagem é redimensionada automaticamente.</div></div>
       </div>` },
     { name: 'nome', label: 'Nome do pet', required: true, col: 'col-md-5' },
-    { name: 'clienteId', label: 'Tutor', type: 'select', required: true, col: 'col-md-7',
-      options: clientes.map(c => ({ value: c.id, label: c.nome })) },
+    { name: 'clienteId', label: 'Tutor', type: 'select', required: true, search: true, col: 'col-md-7',
+      options: clientes.map(c => ({ value: c.id, label: c.nome, busca: [c.telefone, c.cpf, c.email].filter(Boolean).join(' ') })) },
     { name: 'especie', label: 'Espécie', type: 'select', required: true, options: ESPECIES, col: 'col-md-4', default: 'Cão' },
     { name: 'raca', label: 'Raça', col: 'col-md-4', placeholder: 'SRD, Poodle...' },
     { name: 'sexo', label: 'Sexo', type: 'select', options: ['Macho', 'Fêmea'], col: 'col-md-4' },
@@ -171,6 +157,10 @@ async function renderPerfil(view, id) {
       <div class="d-flex flex-column gap-2">
         <a href="#/prontuarios?pet=${id}" class="btn btn-primary"><i class="bi bi-clipboard2-plus me-1"></i>Novo atendimento</a>
         <a href="#/vacinas?pet=${id}" class="btn btn-soft"><i class="bi bi-shield-plus me-1"></i>Aplicar vacina</a>
+        <div class="dropdown">
+          <button class="btn btn-light border w-100 dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-file-earmark-text me-1"></i>Documentos</button>
+          <ul class="dropdown-menu dropdown-menu-end">${menuDocs(['carteira', 'atestado', 'exames', 'termo'])}</ul>
+        </div>
         <div class="d-flex gap-2">
           ${whats ? `<a class="btn btn-light border flex-fill" target="_blank" href="https://wa.me/55${whats}"><i class="bi bi-whatsapp text-success"></i></a>` : ''}
           <button class="btn btn-light border flex-fill" id="btnEdit"><i class="bi bi-pencil"></i></button>
@@ -188,10 +178,12 @@ async function renderPerfil(view, id) {
       <div class="tab-pane fade show active" id="tHist"><div class="card"><div class="card-body">
         ${atend.length ? `<div class="timeline">${atend.map(a => `
           <div class="timeline-item">
-            <div class="d-flex justify-content-between flex-wrap"><strong>${esc(a.tipo || 'Consulta')}</strong><span class="text-muted fs-7">${fmtDateTime(a.data)} · ${esc(a.vetNome || '')}</span></div>
+            <div class="d-flex justify-content-between flex-wrap gap-2"><strong>${esc(a.tipo || 'Consulta')}</strong><span class="text-muted fs-7">${fmtDateTime(a.data)} · ${esc(a.vetNome || '')}
+              <button class="btn btn-sm btn-light border ms-2 py-0" data-pront="${a.id}"><i class="bi bi-printer"></i> Prontuário</button></span></div>
             ${a.queixa ? `<div class="fs-7 mt-1"><span class="text-muted">Queixa:</span> ${esc(a.queixa)}</div>` : ''}
             ${a.diagnostico ? `<div class="fs-7"><span class="text-muted">Diagnóstico:</span> <strong>${esc(a.diagnostico)}</strong></div>` : ''}
-            ${a.prescricao ? `<div class="fs-7 text-muted" style="white-space:pre-line">${esc(a.prescricao)}</div>` : ''}
+            ${a.receita?.some(i => i.medicamento) ? `<div class="fs-7 text-muted"><i class="bi bi-prescription2"></i> ${esc(a.receita.filter(i => i.medicamento).map(i => i.medicamento).join(', '))}</div>`
+              : a.prescricao ? `<div class="fs-7 text-muted" style="white-space:pre-line">${esc(a.prescricao)}</div>` : ''}
             <div class="fs-8 text-muted mt-1">${[a.peso && `Peso ${a.peso}kg`, a.temperatura && `T ${a.temperatura}°C`, a.fc && `FC ${a.fc}`, a.fr && `FR ${a.fr}`].filter(Boolean).join(' · ')}</div>
           </div>`).join('')}</div>` : empty('clipboard2', 'Nenhum atendimento registrado.')}
       </div></div></div>
@@ -207,6 +199,8 @@ async function renderPerfil(view, id) {
     </div>`;
 
   $('#btnEdit', view).onclick = () => abrirFormPet(pet, dados, () => renderPerfil(view, id));
+  view.querySelectorAll('[data-doc]').forEach(b => b.onclick = () => gerarDocumento(b.dataset.doc, { pet, tutor }));
+  view.querySelectorAll('[data-pront]').forEach(b => b.onclick = () => gerarDocumento('prontuario', { pet, tutor, atendimento: atend.find(a => a.id === b.dataset.pront) }));
   $('#btnDel', view).onclick = async () => {
     if (!exigirLicenca()) return;
     if (await confirmar(`Excluir <strong>${esc(pet.nome)}</strong>? O histórico clínico continuará salvo, mas ficará sem vínculo.`)) {

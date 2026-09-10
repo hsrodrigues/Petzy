@@ -26,7 +26,7 @@ export async function render(view, { params }) {
   let ags = [];
 
   view.innerHTML = `
-    ${pageHeader('Agenda', 'Consultas, vacinas, banho & tosa e cirurgias',
+    ${pageHeader('Agenda', 'Consultas, vacinas, banho & tosa e cirurgias · <i class="bi bi-arrows-move"></i> arraste um agendamento para remarcar',
       `<button class="btn btn-primary" id="btnNovo"><i class="bi bi-plus-lg me-1"></i>Novo agendamento</button>`)}
     <div class="card">
       <div class="card-header d-flex align-items-center gap-2 flex-wrap">
@@ -68,7 +68,7 @@ export async function render(view, { params }) {
         const slot = `${diaISO}T${String(h).padStart(2, '0')}`;
         const evs = ags.filter(a => a.inicio.startsWith(slot) && (!prof || a.profissionalId === prof)).sort((a, b) => a.inicio.localeCompare(b.inicio));
         html += `<div class="ag-cell" data-slot="${slot}:00">${evs.map(a => `
-          <div class="ag-event ${a.tipo} ${a.status}" data-id="${a.id}" title="${esc(P[a.petId]?.nome || '')} - ${esc(a.tipo)}">
+          <div class="ag-event ${a.tipo} ${a.status}" data-id="${a.id}" draggable="${a.status === 'concluido' ? 'false' : 'true'}" title="${esc(P[a.petId]?.nome || '')} - ${esc(a.tipo)}">
             <b>${fmtTime(a.inicio)} ${emoji(P[a.petId]?.especie)} ${esc(P[a.petId]?.nome || '—')}</b>
             <span class="opacity-75">${esc(C[a.clienteId]?.nome?.split(' ')[0] || '')} · ${esc(TIPOS.find(t => t.value === a.tipo)?.label || a.tipo)}</span>
           </div>`).join('')}</div>`;
@@ -83,7 +83,7 @@ export async function render(view, { params }) {
     formModal({
       title: ag.id ? 'Editar agendamento' : 'Novo agendamento', values: { status: 'agendado', duracao: 30, ...ag },
       fields: [
-        { name: 'petId', label: 'Pet', type: 'select', required: true, options: petOptions(dados.pets, C), col: 'col-12' },
+        { name: 'petId', label: 'Pet', type: 'select', required: true, search: true, options: petOptions(dados.pets, C), col: 'col-12' },
         { name: 'tipo', label: 'Tipo', type: 'select', required: true, options: TIPOS, col: 'col-md-6', default: 'consulta' },
         { name: 'servicoId', label: 'Serviço (preço)', type: 'select', options: servicos.map(s => ({ value: s.id, label: `${s.nome} — ${money(s.precoVenda)}` })), col: 'col-md-6' },
         { name: 'inicio', label: 'Data e hora', type: 'datetime-local', required: true, col: 'col-md-6' },
@@ -166,6 +166,66 @@ export async function render(view, { params }) {
       if (await confirmar('Excluir este agendamento?')) { await remove('agendamentos', ag.id); toast('Agendamento excluído'); carregar(); }
     };
   }
+
+  // ---------- arrastar e soltar para remarcar ----------
+  let arrastado = null, timerSemana = null;
+
+  async function mover(ag, slot) {
+    const novo = slot.slice(0, 14) + ag.inicio.slice(14, 16); // mantém os minutos originais
+    if (novo === ag.inicio) return;
+    if (ag.status === 'concluido') return toast('Atendimentos concluídos não podem ser remarcados.', 'warning');
+    if (!exigirLicenca()) return;
+    const ini = new Date(novo), fim = new Date(ini.getTime() + (ag.duracao || 30) * 60000);
+    const choque = ag.profissionalId && ags.find(x => x.id !== ag.id && x.profissionalId === ag.profissionalId && !['cancelado', 'faltou'].includes(x.status) &&
+      new Date(x.inicio) < fim && new Date(new Date(x.inicio).getTime() + (x.duracao || 30) * 60000) > ini);
+    if (choque && !(await confirmar(`${esc(E[ag.profissionalId]?.nome || 'O profissional')} já tem <strong>${esc(P[choque.petId]?.nome || '')}</strong> às ${fmtTime(choque.inicio)}. Remarcar mesmo assim?`, { ok: 'Remarcar', danger: false }))) return;
+    const antigo = ag.inicio;
+    ag.inicio = novo;
+    if (!ags.includes(ag)) ags.push(ag);
+    desenhar(); // atualização otimista
+    try {
+      await update('agendamentos', ag.id, { inicio: novo });
+      toast(`${P[ag.petId]?.nome || 'Agendamento'} remarcado para ${fmtDateTime(novo)}`);
+    } catch (e) {
+      ag.inicio = antigo;
+      toast(e.message, 'danger');
+      await carregar();
+    }
+  }
+
+  const grid = $('#grid', view);
+  const limparDrag = () => grid.querySelectorAll('.drag-over, .arrastando').forEach(x => x.classList.remove('drag-over', 'arrastando'));
+  grid.addEventListener('dragstart', (e) => {
+    const ev = e.target.closest?.('[data-id]'); if (!ev) return;
+    arrastado = ags.find(a => a.id === ev.dataset.id);
+    e.dataTransfer.setData('text/plain', ev.dataset.id);
+    e.dataTransfer.effectAllowed = 'move';
+    requestAnimationFrame(() => ev.classList.add('arrastando'));
+  });
+  grid.addEventListener('dragend', () => { limparDrag(); clearTimeout(timerSemana); timerSemana = null; });
+  grid.addEventListener('dragover', (e) => {
+    const cell = e.target.closest?.('[data-slot]'); if (!cell || !arrastado) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (!cell.classList.contains('drag-over')) { grid.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over')); cell.classList.add('drag-over'); }
+  });
+  grid.addEventListener('drop', (e) => {
+    const cell = e.target.closest?.('[data-slot]'); if (!cell || !arrastado) return;
+    e.preventDefault();
+    const ag = arrastado; arrastado = null;
+    limparDrag();
+    mover(ag, cell.dataset.slot);
+  });
+  // segurar o item sobre as setas troca de semana
+  ['#prev', '#next'].forEach(s => {
+    const b = $(s, view);
+    b.addEventListener('dragover', (e) => {
+      if (!arrastado) return;
+      e.preventDefault();
+      if (!timerSemana) timerSemana = setTimeout(() => { timerSemana = null; b.click(); }, 700);
+    });
+    b.addEventListener('dragleave', () => { clearTimeout(timerSemana); timerSemana = null; });
+  });
 
   $('#grid', view).onclick = (e) => {
     const ev = e.target.closest('[data-id]');

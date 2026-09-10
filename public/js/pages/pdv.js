@@ -1,6 +1,6 @@
 import { state, list, col, ref, db, writeBatch, loadTutoresPets, where } from '../store.js';
 import { doc, increment } from '../firebase.js';
-import { $, esc, pageHeader, empty, toast, money, num, norm, debounce, today, toISODate, addDays, fmtDateTime, fmtTime, modal, badge } from '../ui.js';
+import { $, esc, pageHeader, empty, toast, money, num, norm, debounce, today, toISODate, addDays, fmtDateTime, fmtTime, modal, badge, selectBusca } from '../ui.js';
 import { exigirLicenca } from '../app.js';
 import { emoji } from './pets.js';
 
@@ -33,7 +33,7 @@ export async function render(view) {
             <button class="btn btn-sm btn-light" id="limpar">Limpar</button></div>
           <div class="card-body">
             <div class="row g-2 mb-3">
-              <div class="col-12"><select class="form-select" id="cliente"><option value="">Consumidor final</option>${clientes.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('')}</select></div>
+              <div class="col-12"><select class="form-select" id="cliente" data-placeholder="Consumidor final (buscar cliente...)"><option value="">Consumidor final</option>${clientes.map(c => `<option value="${c.id}" data-busca="${esc([c.telefone, c.cpf].filter(Boolean).join(' '))}">${esc(c.nome)}</option>`).join('')}</select></div>
               <div class="col-12"><select class="form-select" id="pet" disabled><option value="">Pet (opcional)</option></select></div>
             </div>
             <div id="itens" style="max-height:34vh;overflow:auto"></div>
@@ -57,6 +57,7 @@ export async function render(view) {
       <div class="table-responsive"><table class="table"><thead><tr><th>Hora</th><th>Cliente</th><th>Itens</th><th>Pagamento</th><th class="text-end">Total</th><th></th></tr></thead><tbody id="vendas"></tbody></table></div>
     </div>`;
 
+  selectBusca($('#cliente', view));
   let pagamento = PAGAMENTOS[0];
 
   function desenharCatalogo() {

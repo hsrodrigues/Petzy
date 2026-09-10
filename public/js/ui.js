@@ -45,7 +45,8 @@ export function toast(msg, type = 'success') {
   }
   const icons = { success: 'check-circle-fill', danger: 'x-circle-fill', warning: 'exclamation-triangle-fill', info: 'info-circle-fill' };
   const el = document.createElement('div');
-  el.className = 'toast align-items-center';
+  el.className = 'toast align-items-center toast-' + type;
+el.setAttribute('role', type === 'danger' ? 'alert' : 'status');
   el.innerHTML = `<div class="d-flex"><div class="toast-body d-flex gap-2 align-items-center">
     <i class="bi bi-${icons[type] || icons.info} text-${type} fs-5"></i><span>${esc(msg)}</span></div>
     <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
@@ -87,7 +88,7 @@ export function confirmar(msg, { title = 'Confirmar', ok = 'Confirmar', danger =
 }
 
 // ---------- Formulário a partir de definição de campos ----------
-function fieldHtml(f, v) {
+export function fieldHtml(f, v) {
   const col = f.col || 'col-md-6';
   const req = f.required ? 'required' : '';
   const val = v ?? f.default ?? '';
@@ -103,9 +104,9 @@ function fieldHtml(f, v) {
     case 'select': {
       const opts = (f.options || []).map(o => {
         const [ov, ol] = typeof o === 'object' ? [o.value, o.label] : [o, o];
-        return `<option value="${esc(ov)}" ${String(ov) === String(val) ? 'selected' : ''}>${esc(ol)}</option>`;
+        return `<option value="${esc(ov)}" ${String(ov) === String(val) ? 'selected' : ''}${o?.busca ? ` data-busca="${esc(o.busca)}"` : ''}>${esc(ol)}</option>`;
       }).join('');
-      return `<div class="${col}">${lbl}<select class="form-select" ${attrs}>${f.required ? '' : '<option value="">—</option>'}${opts}</select></div>`;
+      return `<div class="${col}">${lbl}<select class="form-select" ${attrs}${f.search ? ' data-busca-select' : ''}>${f.required ? '' : '<option value="">—</option>'}${opts}</select></div>`;
     }
     case 'checkbox':
       return `<div class="${col} d-flex align-items-end"><div class="form-check form-switch mb-2">
@@ -137,6 +138,7 @@ export function formModal({ title, fields, values = {}, size = 'lg', submit = 'S
     <button class="btn btn-primary px-4" data-submit><span class="spinner-border spinner-border-sm me-2 d-none"></span>${submit}</button>`;
   const ctx = modal({ title, body, size, footer, onShown });
   const form = $('form', ctx.el);
+  ativarBusca(ctx.el);
   const btn = $('[data-submit]', ctx.el);
   const go = async (e) => {
     e?.preventDefault();
@@ -188,3 +190,84 @@ export function mask(input, type) {
   }[type];
   if (input && fmt) input.addEventListener('input', () => { input.value = fmt(input.value); });
 }
+
+// Redimensiona a imagem no navegador e devolve um data URL (PNG mantém a transparência)
+export function comprimirImagem(file, max = 400, tipo) {
+  tipo ||= file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL(tipo, 0.82));
+    };
+    img.onerror = () => reject(new Error('Não foi possível ler a imagem.'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+// ---------- Select com busca (listas grandes: pets, tutores...) ----------
+// O <select> original fica escondido: valor, validação e eventos 'change' continuam funcionando.
+export function selectBusca(sel) {
+  if (sel.dataset.sbOk) return;
+  sel.dataset.sbOk = '1';
+  const wrap = document.createElement('div');
+  wrap.className = 'sb position-relative';
+  wrap.innerHTML = `<i class="bi bi-search sb-ico"></i>
+    <input type="text" class="form-control sb-input" autocomplete="off" placeholder="${esc(sel.dataset.placeholder || 'Digite para buscar...')}">
+    <button type="button" class="btn-close sb-clear" aria-label="Limpar" hidden></button>
+    <div class="sb-list" hidden></div>`;
+  sel.after(wrap);
+  sel.classList.add('sb-native');
+  sel.tabIndex = -1;
+  const inp = wrap.querySelector('input'), lista = wrap.querySelector('.sb-list'), limpar = wrap.querySelector('.sb-clear');
+  const MAX = 80;
+  let visiveis = [], ativo = 0;
+  const rotulo = () => (sel.value && sel.selectedOptions[0]?.textContent) || '';
+  const sincronizar = () => { inp.value = rotulo(); limpar.hidden = !sel.value; };
+
+  function abrir() {
+    const termos = norm(inp.value === rotulo() ? '' : inp.value).split(/\s+/).filter(Boolean);
+    visiveis = [...sel.options].filter(o => o.value && termos.every(t => norm(o.textContent + ' ' + (o.dataset.busca || '')).includes(t)));
+    ativo = Math.max(0, visiveis.findIndex(o => o.value === sel.value));
+    lista.innerHTML = visiveis.length
+      ? visiveis.slice(0, MAX).map((o, i) => `<div class="sb-item ${i === ativo ? 'ativo' : ''} ${o.value === sel.value ? 'sel' : ''}" data-i="${i}">${esc(o.textContent)}</div>`).join('')
+        + (visiveis.length > MAX ? `<div class="sb-info">+${visiveis.length - MAX} resultados, continue digitando…</div>` : '')
+      : '<div class="sb-info">Nenhum resultado</div>';
+    lista.hidden = false;
+    lista.querySelector('.ativo')?.scrollIntoView({ block: 'nearest' });
+  }
+  function escolher(o) {
+    sel.value = o ? o.value : '';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    sincronizar();
+    lista.hidden = true;
+  }
+  inp.addEventListener('focus', () => { inp.select(); abrir(); });
+  inp.addEventListener('input', abrir);
+  inp.addEventListener('keydown', (e) => {
+    const n = Math.min(visiveis.length, MAX);
+    if (e.key === 'Escape') { if (!lista.hidden) { e.stopPropagation(); lista.hidden = true; sincronizar(); } return; }
+    if (e.key === 'Enter') { e.preventDefault(); if (!lista.hidden && visiveis[ativo]) escolher(visiveis[ativo]); return; }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    if (lista.hidden) return abrir();
+    if (!n) return;
+    ativo = (ativo + (e.key === 'ArrowDown' ? 1 : -1) + n) % n;
+    lista.querySelectorAll('.sb-item').forEach((x, i) => x.classList.toggle('ativo', i === ativo));
+    lista.querySelector('.ativo')?.scrollIntoView({ block: 'nearest' });
+  });
+  lista.addEventListener('mousedown', (e) => {
+    const it = e.target.closest('.sb-item');
+    if (it) { e.preventDefault(); escolher(visiveis[Number(it.dataset.i)]); }
+  });
+  inp.addEventListener('blur', () => setTimeout(() => { lista.hidden = true; sincronizar(); }, 150));
+  limpar.onclick = () => { escolher(null); inp.focus(); };
+  sel.addEventListener('change', sincronizar);
+  sincronizar();
+}
+
+export function ativarBusca(root) { root.querySelectorAll('select[data-busca-select]').forEach(selectBusca); }

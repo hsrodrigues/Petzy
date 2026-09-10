@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pagamento · Petzy</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐾</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="assets/css/style.css" rel="stylesheet">
+</head>
+<body class="hero" style="min-height:100vh">
+<main class="container py-5" style="max-width:540px">
+  <a href="index.html" class="d-flex align-items-center justify-content-center gap-2 text-decoration-none text-dark fw-display fs-4 fw-bold mb-4">
+    <span class="brand-logo">🐾</span> Petzy
+  </a>
+  <div class="card shadow-lg border-0 rounded-4"><div class="card-body p-4" id="box">
+    <div class="loading"><div class="spinner-border"></div></div>
+  </div></div>
+  <p class="text-center text-muted fs-8 mt-3"><i class="bi bi-shield-lock me-1"></i>O pagamento é feito direto no app do seu banco. O Petzy não armazena dados de pagamento.</p>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script type="module">
+  import { db, doc, getDoc } from './js/firebase.js';
+  import { PLANOS } from './js/store.js';
+  import { esc, money } from './js/ui.js';
+  import { renderPix, txid } from './js/pix.js';
+
+  const box = document.getElementById('box');
+  const q = new URLSearchParams(location.search);
+  const plano = q.get('p') || 'pro';
+  const meses = Math.min(24, Math.max(1, parseInt(q.get('m'), 10) || 1));
+  const P = PLANOS[plano];
+  const erro = (msg) => { box.innerHTML = `<div class="empty-state"><i class="bi bi-exclamation-circle"></i><p class="mb-0">${msg}</p></div>`; };
+
+  try {
+    if (!P || plano === 'trial') throw new Error('Link de pagamento inválido.');
+    const valor = Number(q.get('v')) || P.preco * meses;
+    const nome = q.get('n') || '';
+    const snap = await getDoc(doc(db, 'sistema', 'config'));
+    const cfg = snap.exists() ? snap.data() : {};
+    const link = cfg.links?.[plano];
+    if (!cfg.pixChave && !link) throw new Error('As formas de pagamento ainda não foram configuradas. Fale com o suporte do Petzy.');
+
+    const whats = (cfg.whatsapp || '').replace(/\D/g, '');
+    const msgComprovante = encodeURIComponent(`Olá! Segue o comprovante do pagamento da assinatura Petzy${nome ? ' da ' + nome : ''}: plano ${P.nome}, ${meses} ${meses > 1 ? 'meses' : 'mês'}, ${money(valor)}.`);
+    const duasOpcoes = cfg.pixChave && link;
+
+    box.innerHTML = `
+      <div class="text-center mb-4">
+        <div class="text-muted fs-7">Assinatura Petzy${nome ? ' · ' + esc(nome) : ''}</div>
+        <h1 class="h4 fw-bold mb-0">Plano ${esc(P.nome)}</h1>
+        <div class="text-muted fs-7">${meses} ${meses > 1 ? 'meses' : 'mês'} de licença</div>
+        <div class="pdv-total text-primary mt-2">${money(valor)}</div>
+      </div>
+      ${duasOpcoes ? `<ul class="nav nav-pills nav-fill mb-3 gap-2">
+        <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#tPix"><i class="bi bi-qr-code me-1"></i>PIX</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tLink"><i class="bi bi-credit-card me-1"></i>Cartão ou boleto</button></li>
+      </ul>` : ''}
+      <div class="tab-content">
+        ${cfg.pixChave ? '<div class="tab-pane fade show active" id="tPix"><div id="pixBox"></div></div>' : ''}
+        ${link ? `<div class="tab-pane fade ${cfg.pixChave ? '' : 'show active'}" id="tLink">
+          <p class="text-muted fs-7 text-center">Você será levado a um ambiente seguro de pagamento.</p>
+          <a href="${esc(link)}" target="_blank" rel="noopener" class="btn btn-primary btn-lg w-100"><i class="bi bi-credit-card me-1"></i>Pagar com cartão ou boleto</a>
+          ${meses > 1 ? '<p class="fs-8 text-muted text-center mt-2 mb-0">No cartão a cobrança é mensal e recorrente.</p>' : ''}
+        </div>` : ''}
+      </div>
+      <hr class="my-4">
+      <div class="fs-7 text-muted">
+        <div class="fw-semibold text-dark mb-2">Depois de pagar</div>
+        <ol class="ps-3 mb-3">
+          <li>Envie o comprovante${whats ? ' pelo WhatsApp' : ''}.</li>
+          <li>Se você é o administrador da clínica, clique em <strong>"Já paguei"</strong> na tela Assinatura do sistema.</li>
+        </ol>
+        <div class="d-flex gap-2 flex-wrap">
+          ${whats ? `<a class="btn btn-success flex-fill" target="_blank" href="https://wa.me/${whats}?text=${msgComprovante}"><i class="bi bi-whatsapp me-1"></i>Enviar comprovante</a>` : ''}
+          <a class="btn btn-light border flex-fill" href="app.html#/assinatura"><i class="bi bi-box-arrow-in-right me-1"></i>Entrar no sistema</a>
+        </div>
+      </div>`;
+
+    if (cfg.pixChave) await renderPix(document.getElementById('pixBox'), {
+      chave: cfg.pixChave, nome: cfg.pixNome, cidade: cfg.pixCidade, valor,
+      txid: txid(q.get('c'), plano, meses), descricao: `Petzy ${P.nome} ${meses}m`
+    });
+  } catch (e) { erro(esc(e.message)); }
+</script>
+</body>
+</html>

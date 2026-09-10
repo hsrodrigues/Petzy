@@ -1,5 +1,7 @@
 # 🐾 Petzy
 
+**🌐 Acesse: [petzy-c8609.web.app](https://petzy-c8609.web.app)** · teste grátis por 14 dias
+
 SaaS para **clínicas veterinárias e petshops**, feito com HTML, CSS, JavaScript puro, Bootstrap 5 e Firebase (Authentication e Firestore). É multi-clínica: cada clínica que se cadastra tem os dados isolados das demais e paga uma **licença mensal**.
 
 ## Módulos
@@ -34,12 +36,14 @@ vetflow/
     ├── login.html            # login (e-mail/senha e Google) + cadastro da clínica
     ├── app.html              # painel (SPA com rotas por hash)
     ├── admin.html            # painel do dono do SaaS
+    ├── pagar.html            # página pública de pagamento (QR Code PIX)
     ├── assets/css/style.css
     └── js/
         ├── config.js         # credenciais web do Firebase
         ├── firebase.js       # SDK v10 via CDN
         ├── store.js          # dados, sessão, permissões, planos e licença
         ├── ui.js             # modais, formulários, toasts, máscaras, formatação
+        ├── pix.js            # PIX copia e cola (BR Code) + QR Code
         ├── app.js            # menu, roteador, barra de licença
         └── pages/*.js        # uma tela por arquivo
 ```
@@ -95,9 +99,13 @@ No painel, clique em **Formas de pagamento** para cadastrar a chave PIX, o Whats
 
 ### Fluxo de cobrança
 
-1. A clínica vai em **Assinatura**, escolhe o plano e paga por PIX ou pelo link.
+1. A clínica vai em **Assinatura**, escolhe o plano e o período (1, 3, 6 ou 12 meses) e paga pelo **QR Code PIX** gerado com o valor exato, pelo **PIX copia e cola** ou pelo link de cartão/boleto.
 2. Ela clica em **"Já paguei"**, e isso cria um documento em `solicitacoes`.
-3. Você confirma no `admin.html`. A licença é renovada por 1, 3, 6 ou 12 meses e a fatura entra no histórico da clínica.
+3. Você confirma no `admin.html`. A licença é renovada e a fatura entra no histórico da clínica.
+
+Você também pode cobrar ativamente. No `admin.html`, o botão **Cobrar** de cada clínica gera o QR Code PIX e um **link de pagamento** (`pagar.html`) para enviar pelo WhatsApp. A página do link é pública e funciona sem login.
+
+O QR Code segue o padrão BR Code do Banco Central (PIX estático com valor) e é gerado no navegador, sem taxa de intermediário. Configure em **Formas de pagamento** a chave PIX, o nome do favorecido (até 25 caracteres) e a cidade (até 15).
 
 > **Próximo passo opcional:** automatizar a confirmação com webhook (Cloud Functions + Mercado Pago ou Asaas). Isso exige o plano **Blaze** do Firebase.
 

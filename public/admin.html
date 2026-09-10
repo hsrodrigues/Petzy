@@ -22,7 +22,8 @@
 <script type="module">
   import { auth, db, onAuthStateChanged, signOut, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc } from './js/firebase.js';
   import { PLANOS } from './js/store.js';
-  import { $, esc, money, fmtDate, badge, kpi, toast, formModal, confirmar, norm, toISODate } from './js/ui.js';
+  import { $, esc, money, fmtDate, badge, kpi, toast, formModal, modal, confirmar, norm, toISODate } from './js/ui.js';
+  import { renderPix, txid, linkPagamento, copiar } from './js/pix.js';
 
   const DIA = 86400000;
   let clinicas = [], solicitacoes = [], cfg = {};
@@ -72,7 +73,7 @@
       </div>
       ${solicitacoes.length ? `<div class="card mb-4 border-primary"><div class="card-header text-primary"><i class="bi bi-bell me-1"></i>Pagamentos a confirmar (${solicitacoes.length})</div>
         <div class="list-group list-group-flush">${solicitacoes.map(s => `<div class="list-group-item d-flex flex-wrap gap-2 align-items-center">
-          <div class="flex-fill"><strong>${esc(s.clinicaNome)}</strong> quer o plano <strong>${esc(PLANOS[s.plano]?.nome)}</strong> (${money(s.valor)})
+          <div class="flex-fill"><strong>${esc(s.clinicaNome)}</strong> pagou o plano <strong>${esc(PLANOS[s.plano]?.nome)}</strong> · ${s.meses || 1} mês(es) · ${money(s.valor)}
           <div class="fs-8 text-muted">${esc(s.solicitanteEmail)} · ${fmtDate(s.criadoEm?.slice(0, 10))}</div></div>
           <button class="btn btn-sm btn-outline-danger" data-rej="${s.id}">Recusar</button>
           <button class="btn btn-sm btn-success" data-apr="${s.id}"><i class="bi bi-check2 me-1"></i>Confirmar pagamento</button></div>`).join('')}</div></div>` : ''}
@@ -95,6 +96,7 @@
       <td class="fs-7">${fmtDate(c.criadoEm?.slice(0, 10))}</td>
       <td class="text-end text-nowrap">
         ${c.telefone ? `<a class="btn btn-icon btn-light" target="_blank" href="https://wa.me/55${c.telefone.replace(/\D/g, '')}"><i class="bi bi-whatsapp text-success"></i></a>` : ''}
+        <button class="btn btn-sm btn-primary" data-cob="${c.id}"><i class="bi bi-qr-code me-1"></i>Cobrar</button>
         <button class="btn btn-sm btn-success" data-pag="${c.id}">Registrar pagamento</button>
         <button class="btn btn-sm btn-light border" data-trial="${c.id}" title="Estender teste">+7 dias</button>
         <button class="btn btn-sm ${c.status === 'bloqueado' ? 'btn-outline-success' : 'btn-outline-danger'}" data-blq="${c.id}">${c.status === 'bloqueado' ? 'Desbloquear' : 'Bloquear'}</button>
@@ -110,9 +112,11 @@
   }
 
   function formPagamento(c, sol) {
+    const pl = sol?.plano || (PLANOS[c.plano]?.preco ? c.plano : 'pro');
+    const ms = sol?.meses || 1;
     formModal({
       title: `Pagamento · ${esc(c.nome)}`, size: 'md', submit: 'Confirmar e liberar',
-      values: { plano: sol?.plano || (c.plano === 'trial' ? 'pro' : c.plano), meses: 1, valor: sol?.valor ?? PLANOS[sol?.plano || c.plano]?.preco, forma: 'PIX' },
+      values: { plano: pl, meses: ms, valor: sol?.valor ?? PLANOS[pl].preco * ms, forma: 'PIX' },
       fields: [
         { name: 'plano', label: 'Plano', type: 'select', required: true, options: ['basico', 'pro', 'premium'].map(k => ({ value: k, label: `${PLANOS[k].nome} (${money(PLANOS[k].preco)})` })), col: 'col-md-6' },
         { name: 'meses', label: 'Meses', type: 'select', required: true, options: [1, 3, 6, 12].map(n => ({ value: n, label: `${n} mês(es)` })), col: 'col-md-6' },
@@ -130,7 +134,8 @@
 
   async function acoes(e) {
     const b = e.target.closest('button'); if (!b) return;
-    const c = clinicas.find(x => x.id === (b.dataset.pag || b.dataset.trial || b.dataset.blq));
+    const c = clinicas.find(x => x.id === (b.dataset.pag || b.dataset.trial || b.dataset.blq || b.dataset.cob));
+    if (b.dataset.cob) cobrar(c);
     if (b.dataset.pag) formPagamento(c);
     if (b.dataset.trial) { await updateDoc(doc(db, 'clinicas', c.id), { validoAteMs: Math.max(Date.now(), c.validoAteMs || 0) + 7 * DIA }); toast('Teste estendido em 7 dias'); carregar(); }
     if (b.dataset.blq && await confirmar(`${c.status === 'bloqueado' ? 'Desbloquear' : 'Bloquear'} <strong>${esc(c.nome)}</strong>?`, { danger: c.status !== 'bloqueado' })) {
@@ -140,17 +145,61 @@
     if (b.dataset.rej && await confirmar('Recusar este aviso de pagamento?')) { await updateDoc(doc(db, 'solicitacoes', b.dataset.rej), { status: 'recusado' }); carregar(); }
   }
 
+  // gera QR Code PIX + link de pagamento para enviar a uma clínica
+  function cobrar(c) {
+    const planoIni = PLANOS[c.plano]?.preco ? c.plano : 'pro';
+    const fone = (c.telefone || '').replace(/\D/g, '');
+    const { el } = modal({
+      title: `Cobrar · ${esc(c.nome)}`, size: 'md',
+      body: `
+        <div class="row g-2 mb-3">
+          <div class="col-5"><label class="form-label">Plano</label><select class="form-select" id="cbPlano">${['basico', 'pro', 'premium'].map(k => `<option value="${k}" ${k === planoIni ? 'selected' : ''}>${PLANOS[k].nome}</option>`).join('')}</select></div>
+          <div class="col-3"><label class="form-label">Meses</label><select class="form-select" id="cbMeses">${[1, 3, 6, 12].map(m => `<option>${m}</option>`).join('')}</select></div>
+          <div class="col-4"><label class="form-label">Valor (R$)</label><input type="number" step="0.01" min="0" class="form-control" id="cbValor"></div>
+        </div>
+        ${cfg.pixChave ? '<div id="cbPix" class="mb-3"></div>' : '<div class="alert alert-warning fs-7">Cadastre sua chave PIX em <strong>Formas de pagamento</strong> para gerar o QR Code.</div>'}
+        <label class="form-label fs-7 mb-1">Link de pagamento <span class="text-muted fw-normal">(página com QR Code, copia e cola e cartão)</span></label>
+        <div class="input-group"><input class="form-control" style="font-size:.75rem" readonly id="cbLink">
+          <button class="btn btn-outline-primary" type="button" id="cbCopiar"><i class="bi bi-clipboard"></i></button></div>`,
+      footer: `<a class="btn btn-light border me-auto" target="_blank" id="cbAbrir"><i class="bi bi-box-arrow-up-right me-1"></i>Abrir página</a>
+        ${fone ? '<a class="btn btn-success" target="_blank" id="cbWhats"><i class="bi bi-whatsapp me-1"></i>Enviar no WhatsApp</a>' : ''}`
+    });
+    const plano = $('#cbPlano', el), meses = $('#cbMeses', el), valor = $('#cbValor', el);
+
+    function atualizar(recalcular) {
+      if (recalcular) valor.value = (PLANOS[plano.value].preco * Number(meses.value)).toFixed(2);
+      const v = Number(valor.value) || 0;
+      const link = linkPagamento({ plano: plano.value, meses: meses.value, clinicaId: c.id, nome: c.nome, valor: v });
+      $('#cbLink', el).value = link;
+      $('#cbAbrir', el).href = link;
+      const w = $('#cbWhats', el);
+      if (w) w.href = `https://wa.me/55${fone}?text=${encodeURIComponent(`Olá! Segue o link para pagamento da assinatura Petzy da ${c.nome}.\nPlano ${PLANOS[plano.value].nome} · ${meses.value} mês(es) · ${money(v)}\n\n${link}`)}`;
+      if (cfg.pixChave) renderPix($('#cbPix', el), {
+        chave: cfg.pixChave, nome: cfg.pixNome, cidade: cfg.pixCidade, valor: v,
+        txid: txid(c.id, plano.value, meses.value), descricao: `Petzy ${PLANOS[plano.value].nome} ${meses.value}m`
+      });
+    }
+
+    plano.onchange = meses.onchange = () => atualizar(true);
+    valor.onchange = () => atualizar(false);
+    $('#cbCopiar', el).onclick = async () => { await copiar($('#cbLink', el).value); toast('Link copiado'); };
+    atualizar(true);
+  }
+
   function configurar() {
     formModal({
-      title: 'Formas de pagamento da licença', values: { pixChave: cfg.pixChave, pixNome: cfg.pixNome, whatsapp: cfg.whatsapp, linkBasico: cfg.links?.basico, linkPro: cfg.links?.pro, linkPremium: cfg.links?.premium },
+      title: 'Formas de pagamento da licença', values: { pixChave: cfg.pixChave, pixNome: cfg.pixNome, pixCidade: cfg.pixCidade, whatsapp: cfg.whatsapp, linkBasico: cfg.links?.basico, linkPro: cfg.links?.pro, linkPremium: cfg.links?.premium },
       fields: [
-        { name: 'pixChave', label: 'Chave PIX', col: 'col-md-6' }, { name: 'pixNome', label: 'Nome do favorecido', col: 'col-md-6' },
+        { type: 'section', label: 'PIX (gera QR Code e copia e cola automaticamente)' },
+        { name: 'pixChave', label: 'Chave PIX', col: 'col-12', placeholder: 'CPF, CNPJ, e-mail, +5511999999999 ou chave aleatória' },
+        { name: 'pixNome', label: 'Nome do favorecido (como no banco)', col: 'col-md-8', attrs: 'maxlength="25"' },
+        { name: 'pixCidade', label: 'Cidade', col: 'col-md-4', attrs: 'maxlength="15"', placeholder: 'SAO PAULO' },
         { name: 'whatsapp', label: 'WhatsApp do suporte (com DDI)', col: 'col-12', placeholder: '5511999999999' },
         { type: 'section', label: 'Links de pagamento recorrente (Mercado Pago, Asaas, Stripe...)' },
         { name: 'linkBasico', label: 'Link plano Básico', col: 'col-12' }, { name: 'linkPro', label: 'Link plano Profissional', col: 'col-12' }, { name: 'linkPremium', label: 'Link plano Premium', col: 'col-12' }
       ],
       onSubmit: async (d) => {
-        await setDoc(doc(db, 'sistema', 'config'), { pixChave: d.pixChave, pixNome: d.pixNome, whatsapp: d.whatsapp, links: { basico: d.linkBasico, pro: d.linkPro, premium: d.linkPremium } });
+        await setDoc(doc(db, 'sistema', 'config'), { pixChave: d.pixChave, pixNome: d.pixNome, pixCidade: d.pixCidade, whatsapp: d.whatsapp, links: { basico: d.linkBasico, pro: d.linkPro, premium: d.linkPremium } });
         toast('Configuração salva'); await carregar();
       }
     });
