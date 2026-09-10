@@ -103,6 +103,22 @@ function fecharMenuMobile() { $('#sidebar').classList.remove('show'); $('#backdr
 $('#btnMenu').onclick = () => { $('#sidebar').classList.add('show'); $('#backdrop').classList.remove('d-none'); };
 $('#backdrop').onclick = fecharMenuMobile;
 
+const sidebarToggle = $('#btnSidebarToggle');
+const sidebarRecolhido = localStorage.getItem('pz-sidebar-recolhido') === '1';
+const atualizarSidebar = (recolhido) => {
+  document.body.classList.toggle('sidebar-collapsed', recolhido);
+  sidebarToggle?.setAttribute('aria-expanded', String(!recolhido));
+  sidebarToggle?.setAttribute('title', recolhido ? 'Expandir menu' : 'Recolher menu');
+  sidebarToggle?.setAttribute('aria-label', recolhido ? 'Expandir menu' : 'Recolher menu');
+  if (sidebarToggle) sidebarToggle.innerHTML = `<i class="bi bi-${recolhido ? 'layout-sidebar' : 'layout-sidebar-inset'}"></i>`;
+};
+atualizarSidebar(sidebarRecolhido);
+sidebarToggle?.addEventListener('click', () => {
+  const recolhido = !document.body.classList.contains('sidebar-collapsed');
+  localStorage.setItem('pz-sidebar-recolhido', recolhido ? '1' : '0');
+  atualizarSidebar(recolhido);
+});
+
 // ---------- Busca global ----------
 $('#globalSearch').onsubmit = (e) => {
   e.preventDefault();
