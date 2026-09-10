@@ -81,7 +81,7 @@ input[type=color].form-control { padding: .25rem; height: 42px; }
 .kpi-value { font-size: 1.55rem; font-weight: 700; line-height: 1.1; font-family: 'Plus Jakarta Sans', sans-serif; }
 .kpi-label { font-size: .82rem; color: var(--pz-muted); }
 .kpi > div:last-child { min-width: 0; max-width: 100%; }
-.kpi-value { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kpi-value { max-width: 100%; overflow: visible; text-overflow: clip; white-space: normal; word-break: normal; }
 
 @media (max-width: 575.98px) {
    .kpi { gap: .65rem; }
