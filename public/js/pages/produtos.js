@@ -9,11 +9,13 @@ const CATEGORIAS = {
 
 export async function render(view) {
   let itens = await list('produtos');
+  let fornecedores = await list('fornecedores');
   let aba = 'produto';
 
   view.innerHTML = `
     ${pageHeader('Produtos & Serviços', 'Catálogo, preços e controle de estoque',
       `<button class="btn btn-light border" id="btnCsv"><i class="bi bi-download me-1"></i>Exportar</button>
+       <a class="btn btn-light border" href="#/fornecedores"><i class="bi bi-truck me-1"></i>Fornecedores</a>
        <button class="btn btn-primary" id="btnNovo"><i class="bi bi-plus-lg me-1"></i>Novo item</button>`)}
     <div class="row g-3 mb-3" id="kpis"></div>
     <div class="card">
@@ -116,7 +118,7 @@ export async function render(view) {
         { name: 'quantidade', label: 'Quantidade', type: 'number', step: '0.01', required: true, col: 'col-md-6' },
         { name: 'custoUnitario', label: 'Custo unitário', type: 'money', col: 'col-md-6', attrs: 'data-compra' },
         { name: 'totalCompra', label: 'Total da compra', type: 'money', col: 'col-md-6', attrs: 'data-compra readonly' },
-        { name: 'fornecedor', label: 'Fornecedor', col: 'col-md-6', attrs: 'data-compra' },
+        { name: 'fornecedorId', label: 'Fornecedor', type: 'select', options: fornecedores.map(f => ({ value: f.id, label: f.nome })), col: 'col-md-6', attrs: 'data-compra' },
         { name: 'notaFiscal', label: 'NF / documento', col: 'col-md-6', attrs: 'data-compra' },
         { name: 'vencimento', label: 'Vencimento da compra', type: 'date', col: 'col-md-6', attrs: 'data-compra' },
         { name: 'formaPagamento', label: 'Forma de pagamento', type: 'select', options: ['Boleto', 'PIX', 'Transferência', 'Cartão', 'Dinheiro', 'A definir'], col: 'col-md-6', attrs: 'data-compra' },
@@ -143,7 +145,7 @@ export async function render(view) {
         await bumpEstoque(p.id, delta);
         const movimentoId = await create('movimentacoes', {
           produtoId: p.id, produto: p.nome, tipo: d.tipo, quantidade: delta, motivo: d.motivo,
-          fornecedor: d.fornecedor, notaFiscal: d.notaFiscal, custoUnitario: Number(d.custoUnitario) || 0,
+          fornecedorId: d.fornecedorId || null, fornecedor: fornecedores.find(f => f.id === d.fornecedorId)?.nome || '', notaFiscal: d.notaFiscal, custoUnitario: Number(d.custoUnitario) || 0,
           totalCompra: Number(d.totalCompra) || 0, data: new Date().toISOString()
         });
         if (d.tipo === 'entrada' && Number(d.custoUnitario) > 0) await update('produtos', p.id, { precoCusto: Number(d.custoUnitario) });
@@ -152,7 +154,8 @@ export async function render(view) {
             tipo: 'despesa', categoria: 'Fornecedores', descricao: `Compra de ${p.nome}${d.fornecedor ? ' · ' + d.fornecedor : ''}`,
             valor: Number(d.totalCompra), vencimento: d.vencimento || new Date().toISOString().slice(0, 10),
             pago: Boolean(d.pago), pagoEm: d.pago ? new Date().toISOString().slice(0, 10) : null,
-            formaPagamento: d.formaPagamento || 'A definir', fornecedor: d.fornecedor || '', notaFiscal: d.notaFiscal || '',
+            formaPagamento: d.formaPagamento || 'A definir', fornecedorId: d.fornecedorId || null,
+            fornecedor: fornecedores.find(f => f.id === d.fornecedorId)?.nome || '', notaFiscal: d.notaFiscal || '',
             origem: 'movimentacao', origemId: movimentoId, produtoId: p.id
           });
         }

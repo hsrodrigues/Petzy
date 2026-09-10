@@ -12,6 +12,7 @@ const ROTAS = {
   vacinas:       { t: 'Vacinas',          i: 'shield-plus',       s: 'Clínico' },
   pdv:           { t: 'PDV / Vendas',     i: 'cart3',             s: 'Comercial' },
   produtos:      { t: 'Produtos & Serviços', i: 'box-seam',       s: 'Comercial' },
+  fornecedores:  { t: 'Fornecedores',     i: 'truck',             s: 'Comercial' },
   financeiro:    { t: 'Financeiro',       i: 'cash-coin',         s: 'Gestão' },
   relatorios:    { t: 'Relatórios',       i: 'bar-chart-line',    s: 'Gestão' },
   configuracoes: { t: 'Configurações',    i: 'gear',              s: 'Gestão' },

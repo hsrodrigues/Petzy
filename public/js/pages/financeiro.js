@@ -65,7 +65,7 @@ export async function render(view) {
     const cores = { pago: 'success', aberto: 'warning', vencido: 'danger' };
     $('#tbody', view).innerHTML = rows.length ? rows.map(l => `<tr>
       <td class="fs-7 text-nowrap">${fmtDate(l.vencimento)}</td>
-      <td><div class="fw-semibold fs-7">${esc(l.descricao)}</div>${l.clienteId && C[l.clienteId] ? `<div class="fs-8 text-muted">${esc(C[l.clienteId].nome)}</div>` : ''}</td>
+      <td><div class="fw-semibold fs-7">${esc(l.descricao)}</div>${l.clienteId && C[l.clienteId] ? `<div class="fs-8 text-muted">Cliente: ${esc(C[l.clienteId].nome)}</div>` : ''}${l.fornecedor ? `<div class="fs-8 text-muted">Fornecedor: ${esc(l.fornecedor)}</div>` : ''}</td>
       <td class="fs-7">${esc(l.categoria || '—')}</td><td class="fs-7">${esc(l.formaPagamento || '—')}</td>
       <td>${badge(status(l), cores[status(l)])}</td>
       <td class="text-end fw-semibold ${l.tipo === 'receita' ? 'text-success' : 'text-danger'}">${l.tipo === 'receita' ? '+' : '−'} ${money(l.valor)}</td>

@@ -89,7 +89,7 @@ export const PAPEIS = {
 
 const ACESSO = {
   admin: '*',
-  veterinario: ['dashboard', 'agenda', 'clientes', 'pets', 'prontuarios', 'vacinas', 'produtos', 'pdv', 'relatorios'],
+  veterinario: ['dashboard', 'agenda', 'clientes', 'pets', 'prontuarios', 'vacinas', 'produtos', 'fornecedores', 'pdv', 'relatorios'],
   recepcao: ['dashboard', 'agenda', 'clientes', 'pets', 'vacinas', 'produtos', 'pdv', 'financeiro'],
   groomer: ['dashboard', 'agenda', 'clientes', 'pets']
 };
