@@ -90,11 +90,11 @@ export const PAPEIS = {
 const ACESSO = {
   admin: '*',
   veterinario: ['dashboard', 'agenda', 'clientes', 'pets', 'prontuarios', 'vacinas', 'produtos', 'fornecedores', 'pdv', 'relatorios'],
-  recepcao: ['dashboard', 'agenda', 'clientes', 'pets', 'vacinas', 'produtos', 'pdv', 'financeiro'],
+  recepcao: ['dashboard', 'agenda', 'clientes', 'pets', 'vacinas', 'produtos', 'pdv', 'financeiro', 'fiscal'],
   groomer: ['dashboard', 'agenda', 'clientes', 'pets']
 };
 
-export const MODULOS = ['dashboard', 'agenda', 'clientes', 'pets', 'prontuarios', 'vacinas', 'pdv', 'produtos', 'fornecedores', 'financeiro', 'relatorios', 'configuracoes'];
+export const MODULOS = ['dashboard', 'agenda', 'clientes', 'pets', 'prontuarios', 'vacinas', 'pdv', 'produtos', 'fornecedores', 'financeiro', 'fiscal', 'relatorios', 'configuracoes'];
 
 export const pode = (rota) => {
   const a = ACESSO[state.perfil?.papel] || [];

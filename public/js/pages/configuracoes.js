@@ -9,8 +9,40 @@ import { previsualizar } from '../documentos.js';
 import * as D from '../docs.js';
 
 // coleções operacionais (ordem: dependentes primeiro)
-const COLECOES = ['agendamentos', 'atendimentos', 'vacinas', 'vendas', 'financeiro', 'movimentacoes', 'modelosReceita', 'pets', 'clientes', 'produtos'];
+const COLECOES = ['agendamentos', 'atendimentos', 'vacinas', 'vendas', 'financeiro', 'movimentacoes', 'modelosReceita', 'pets', 'clientes', 'produtos', 'fornecedores', 'fiscal'];
 const UFS = 'AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' ');
+
+const IMPORTACOES = {
+  clientes: { label: 'Tutores', required: ['nome'], fields: ['nome', 'cpf', 'telefone', 'email', 'cep', 'endereco', 'numero', 'bairro', 'cidade', 'uf', 'obs'] },
+  pets: { label: 'Pets', required: ['nome', 'clienteNome'], fields: ['nome', 'clienteNome', 'especie', 'raca', 'sexo', 'nascimento', 'peso', 'alergias', 'microchip', 'obs'] },
+  produtos: { label: 'Produtos', required: ['nome', 'precoVenda'], fields: ['nome', 'categoria', 'codigo', 'precoCusto', 'precoVenda', 'estoque', 'estoqueMinimo', 'unidade', 'validade'] },
+  fornecedores: { label: 'Fornecedores', required: ['nome'], fields: ['nome', 'documento', 'contato', 'telefone', 'email', 'endereco', 'observacoes'] }
+};
+
+function parseCSV(text) {
+  const rows = [], row = [];
+  let value = '', quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i], next = text[i + 1];
+    if (ch === '"' && quoted && next === '"') { value += '"'; i++; continue; }
+    if (ch === '"') { quoted = !quoted; continue; }
+    if (!quoted && (ch === ';' || ch === ',')) { row.push(value.trim()); value = ''; continue; }
+    if (!quoted && (ch === '\n' || ch === '\r')) {
+      if (ch === '\r' && next === '\n') i++;
+      row.push(value.trim()); value = '';
+      if (row.some(Boolean)) rows.push(row.splice(0));
+      continue;
+    }
+    value += ch;
+  }
+  if (value || row.length) { row.push(value.trim()); rows.push(row); }
+  return rows;
+}
+
+const chaveCSV = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const numeroCSV = (s) => Number(String(s || '').replace(/R\$\s?/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.')) || 0;
+const baixarJSON = (nome, dados) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' })); a.download = nome; a.click(); URL.revokeObjectURL(a.href); };
+const lerArquivo = (file) => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result || '')); r.onerror = () => reject(new Error('Não foi possível ler o arquivo.')); r.readAsText(file, 'UTF-8'); });
 
 export async function render(view) {
   const admin = state.perfil.papel === 'admin';
@@ -95,6 +127,16 @@ export async function render(view) {
 
       <!-- ===== Dados ===== -->
       ${admin ? `<div class="tab-pane fade" id="tDados">
+        <div class="card mb-3"><div class="card-body">
+          <h5 class="fw-bold mb-1"><i class="bi bi-shield-check text-success me-1"></i>Privacidade e LGPD</h5>
+          <p class="text-muted mb-3">Exporte os dados da clínica em formato portátil para atender solicitações de acesso e mantenha o uso de dados limitado à operação do Petzy.</p>
+          <button class="btn btn-outline-success" id="btnExportarLGPD"><i class="bi bi-file-earmark-lock me-1"></i>Exportar dados da clínica (JSON)</button>
+        </div></div>
+        <div class="card mb-3"><div class="card-body">
+          <h5 class="fw-bold mb-1"><i class="bi bi-cloud-arrow-up text-primary me-1"></i>Migrar dados de outro sistema</h5>
+          <p class="text-muted mb-3">Importe tutores, pets, produtos ou fornecedores por CSV. O arquivo original não é alterado e cada registro recebe a marca de origem da importação.</p>
+          <button class="btn btn-primary" id="btnImportar"><i class="bi bi-upload me-1"></i>Importar CSV</button>
+        </div></div>
         <div class="card mb-3"><div class="card-body">
           <h5 class="fw-bold mb-1"><i class="bi bi-magic text-primary me-1"></i>Dados de exemplo</h5>
           <p class="text-muted mb-3">Tutores, pets, produtos, serviços, agenda da semana, prontuários, vacinas, vendas e financeiro dos últimos meses.
@@ -220,6 +262,64 @@ export async function render(view) {
   }
 
   if (admin) {
+    $('#btnExportarLGPD', view).onclick = async (e) => {
+      const b = e.currentTarget;
+      b.disabled = true;
+      try {
+        const colecoes = Object.fromEntries(await Promise.all(COLECOES.map(async nome => [nome, await list(nome)])));
+        baixarJSON(`petzy-lgpd-${toISODate()}.json`, { exportadoEm: new Date().toISOString(), clinica: c, equipe: await list('equipe'), colecoes });
+        toast('Exportação LGPD gerada');
+      } catch (err) { toast(err.message, 'danger'); }
+      finally { b.disabled = false; }
+    };
+
+    $('#btnImportar', view).onclick = () => {
+      const { el, close } = modal({
+        title: 'Migrar dados por CSV', size: 'md',
+        body: `<p class="text-muted fs-7">Escolha o tipo de cadastro e um arquivo CSV separado por vírgula ou ponto e vírgula. A primeira linha deve conter os nomes das colunas.</p>
+          <label class="form-label">Tipo de cadastro</label><select class="form-select mb-3" id="tipoImportacao">${Object.entries(IMPORTACOES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select>
+          <label class="form-label">Arquivo CSV</label><input class="form-control" type="file" id="arquivoImportacao" accept=".csv,text/csv">
+          <div class="form-text mt-2" id="ajudaImportacao"></div><div class="alert alert-warning fs-8 mt-3 mb-0"><i class="bi bi-shield-exclamation me-1"></i>Revise o arquivo e tenha autorização para importar esses dados pessoais.</div>`,
+        footer: '<button class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary" id="confirmarImportacao"><i class="bi bi-upload me-1"></i>Importar</button>'
+      });
+      const tipo = $('#tipoImportacao', el), arquivo = $('#arquivoImportacao', el), ajuda = $('#ajudaImportacao', el), ok = $('#confirmarImportacao', el);
+      const atualizarAjuda = () => { const cfg = IMPORTACOES[tipo.value]; ajuda.textContent = `Colunas obrigatórias: ${cfg.required.join(', ')}. ${tipo.value === 'pets' ? 'Use clienteNome para vincular o pet a um tutor já cadastrado.' : ''}`; };
+      tipo.onchange = atualizarAjuda; atualizarAjuda();
+      ok.onclick = async () => {
+        if (!arquivo.files[0]) return toast('Selecione um arquivo CSV.', 'warning');
+        ok.disabled = true;
+        try {
+          const cfg = IMPORTACOES[tipo.value], rows = parseCSV(await lerArquivo(arquivo.files[0]));
+          if (rows.length < 2) throw new Error('O CSV precisa ter cabeçalho e pelo menos uma linha.');
+          const headers = rows[0].map(chaveCSV), missing = cfg.required.filter(k => !headers.includes(chaveCSV(k)));
+          if (missing.length) throw new Error(`Colunas obrigatórias ausentes: ${missing.join(', ')}`);
+          const clientesAtuais = tipo.value === 'pets' ? await list('clientes') : [];
+          const clientesPorNome = Object.fromEntries(clientesAtuais.map(x => [chaveCSV(x.nome), x.id]));
+          const registros = [], erros = [];
+          rows.slice(1).forEach((values, index) => {
+            const raw = Object.fromEntries(cfg.fields.map(field => [field, values[headers.indexOf(chaveCSV(field))] || '']));
+            if (cfg.required.some(field => !String(raw[field] || '').trim())) { erros.push(`linha ${index + 2}: campo obrigatório vazio`); return; }
+            if (tipo.value === 'pets') {
+              const clienteId = clientesPorNome[chaveCSV(raw.clienteNome)];
+              if (!clienteId) { erros.push(`linha ${index + 2}: tutor não encontrado (${raw.clienteNome})`); return; }
+              raw.clienteId = clienteId; delete raw.clienteNome;
+            }
+            ['precoCusto', 'precoVenda', 'estoque', 'estoqueMinimo', 'peso'].forEach(k => { if (k in raw) raw[k] = numeroCSV(raw[k]); });
+            if (tipo.value === 'produtos') { raw.tipo = 'produto'; raw.ativo = true; }
+            registros.push({ ...raw, demo: false, origemImportacao: 'csv', importadoEm: new Date().toISOString() });
+          });
+          if (erros.length) throw new Error(`Importação interrompida. ${erros.slice(0, 3).join('; ')}${erros.length > 3 ? '...' : ''}`);
+          for (let i = 0; i < registros.length; i += 450) {
+            const b = writeBatch(db);
+            registros.slice(i, i + 450).forEach(registro => b.set(doc(col(tipo.value)), registro));
+            await b.commit();
+          }
+          toast(`${registros.length} registros importados em ${cfg.label}`); close();
+        } catch (err) { toast(err.message, 'danger'); }
+        finally { ok.disabled = false; }
+      };
+    };
+
     $('#btnMembro', view).onclick = () => {
       if (!exigirLicenca()) return;
       if (equipe.filter(m => m.ativo).length >= limite) return toast(`Seu plano permite ${limite} usuários. Faça upgrade em Assinatura.`, 'warning');
@@ -270,7 +370,7 @@ export async function render(view) {
         const labels = {
           dashboard: 'Dashboard', agenda: 'Agenda', clientes: 'Tutores', pets: 'Pets', prontuarios: 'Prontuários',
           vacinas: 'Vacinas', pdv: 'PDV / Vendas', produtos: 'Produtos & Serviços', fornecedores: 'Fornecedores',
-          financeiro: 'Financeiro', relatorios: 'Relatórios', configuracoes: 'Configurações'
+          financeiro: 'Financeiro', fiscal: 'Fiscal', relatorios: 'Relatórios', configuracoes: 'Configurações'
         };
         const extras = m.modulosExtras || [], bloqueados = m.modulosBloqueados || [];
         formModal({
