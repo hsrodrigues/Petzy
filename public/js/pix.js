@@ -20,18 +20,24 @@ export function crc16(str) {
 // CPF/CNPJ -> só dígitos, telefone -> +55DDDNUMERO, e-mail -> minúsculo, aleatória -> como está
 export function normalizarChave(chave) {
   const k = String(chave || '').trim();
+  if (!k) return '';
   if (k.includes('@')) return k.toLowerCase();
-  if (k.startsWith('+') || k.includes('(')) {
-    const d = k.replace(/\D/g, '');
-    return '+' + (d.length <= 11 ? '55' + d : d);
-  }
+  const d = k.replace(/\D/g, '');
+  if (/^\d{10,11}$/.test(k) && (d.length === 10 || d[2] === '9')) return '+55' + d;
   if (/^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/.test(k) || /^\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}$/.test(k)) return k.replace(/\D/g, '');
+  if (k.startsWith('+') || k.includes('(') || /^\d{10,13}$/.test(k)) {
+    if (d.length === 10 || d.length === 11) return '+55' + d;
+    if ((d.length === 12 || d.length === 13) && d.startsWith('55')) return '+' + d;
+  }
   return k;
 }
 
 export function pixPayload({ chave, nome, cidade, valor, txid, descricao }) {
-  let conta = campo('00', 'br.gov.bcb.pix') + campo('01', normalizarChave(chave));
+  const chaveNormalizada = normalizarChave(chave);
+  if (!chaveNormalizada) throw new Error('Cadastre uma chave PIX para gerar a cobrança.');
+  let conta = campo('00', 'br.gov.bcb.pix') + campo('01', chaveNormalizada);
   const livre = 99 - conta.length - 4; // o campo 26 inteiro tem no máximo 99 caracteres
+  if (livre < 0) throw new Error('A chave PIX informada é longa demais.');
   const desc = ascii(descricao, Math.min(livre, 40));
   if (desc) conta += campo('02', desc);
 
