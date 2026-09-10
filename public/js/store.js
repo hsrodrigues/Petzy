@@ -115,3 +115,17 @@ export const PLANOS = {
   pro:     { nome: 'Profissional', preco: 149.9,  usuarios: 5,  destaque: true,  recursos: ['Tudo do Básico', 'Financeiro completo', 'Relatórios gerenciais', 'Lembretes por WhatsApp', 'Até 5 usuários'] },
   premium: { nome: 'Premium',      preco: 249.9,  usuarios: 99, destaque: false, recursos: ['Tudo do Profissional', 'Usuários ilimitados', 'Multiunidades', 'Suporte prioritário'] }
 };
+
+export async function carregarPlanos() {
+  try {
+    const snap = await getDocs(collection(db, 'planos'));
+    snap.forEach(d => {
+      const plano = PLANOS[d.id];
+      const preco = Number(d.data()?.preco);
+      if (plano && d.id !== 'trial' && Number.isFinite(preco) && preco >= 0) plano.preco = preco;
+    });
+  } catch (e) {
+    console.warn('Não foi possível carregar os preços dos planos. Usando valores padrão.', e);
+  }
+  return PLANOS;
+}

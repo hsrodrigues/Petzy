@@ -21,7 +21,7 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script type="module">
   import { auth, db, onAuthStateChanged, signOut, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc } from './js/firebase.js';
-  import { PLANOS } from './js/store.js';
+  import { PLANOS, carregarPlanos } from './js/store.js';
   import { $, esc, money, fmtDate, badge, kpi, toast, formModal, modal, confirmar, norm, toISODate } from './js/ui.js';
   import { renderPix, txid, linkPagamento, copiar } from './js/pix.js';
 
@@ -39,6 +39,7 @@
         <a href="app.html" class="btn btn-primary">Voltar ao app</a></div>`;
       return;
     }
+    await carregarPlanos();
     await carregar();
   });
 
@@ -64,7 +65,8 @@
     const mrr = ativas.reduce((s, c) => s + (c.valorMensal || PLANOS[c.plano]?.preco || 0), 0);
     $('#main').innerHTML = `
       <div class="page-header"><div><h1>Painel do SaaS</h1><p>Clínicas, licenças e cobranças</p></div>
-        <button class="btn btn-light border" id="btnCfg"><i class="bi bi-gear me-1"></i>Formas de pagamento</button></div>
+        <div class="d-flex gap-2"><button class="btn btn-light border" id="btnPlanos"><i class="bi bi-tags me-1"></i>Planos e preços</button>
+        <button class="btn btn-light border" id="btnCfg"><i class="bi bi-gear me-1"></i>Formas de pagamento</button></div></div>
       <div class="row g-3 mb-4">
         <div class="col-6 col-xl-3">${kpi('building', 'Clínicas cadastradas', clinicas.length)}</div>
         <div class="col-6 col-xl-3">${kpi('check-circle', 'Assinantes ativos', ativas.length, 'success')}</div>
@@ -84,7 +86,29 @@
     desenharTabela();
     $('#busca').oninput = desenharTabela;
     $('#btnCfg').onclick = configurar;
+    $('#btnPlanos').onclick = configurarPlanos;
     $('#main').onclick = acoes;
+  }
+
+  function configurarPlanos() {
+    formModal({
+      title: 'Planos e preços',
+      values: { precoBasico: PLANOS.basico.preco, precoPro: PLANOS.pro.preco, precoPremium: PLANOS.premium.preco },
+      fields: [
+        { type: 'section', label: 'Os novos preços aparecem na página principal, na assinatura e nas novas cobranças.' },
+        { name: 'precoBasico', label: 'Plano Básico (R$/mês)', type: 'money', required: true, col: 'col-md-4' },
+        { name: 'precoPro', label: 'Plano Profissional (R$/mês)', type: 'money', required: true, col: 'col-md-4' },
+        { name: 'precoPremium', label: 'Plano Premium (R$/mês)', type: 'money', required: true, col: 'col-md-4' }
+      ],
+      onSubmit: async (d) => {
+        const valores = { basico: Number(d.precoBasico), pro: Number(d.precoPro), premium: Number(d.precoPremium) };
+        if (Object.values(valores).some(v => !Number.isFinite(v) || v < 0)) throw new Error('Informe preços válidos para todos os planos.');
+        await Promise.all(Object.entries(valores).map(([id, preco]) => setDoc(doc(db, 'planos', id), { preco, atualizadoEm: new Date().toISOString() }, { merge: true })));
+        Object.entries(valores).forEach(([id, preco]) => { PLANOS[id].preco = preco; });
+        toast('Preços dos planos atualizados');
+        await carregar();
+      }
+    });
   }
 
   function desenharTabela() {

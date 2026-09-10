@@ -1,6 +1,6 @@
 // ================= Shell do app: sessão, menu, rotas e licença =================
 import { auth, db, doc, getDoc, onAuthStateChanged, signOut } from './firebase.js';
-import { state, loadSession, pode, PAPEIS, licenca } from './store.js';
+import { state, loadSession, pode, PAPEIS, licenca, carregarPlanos } from './store.js';
 import { $, $$, esc, initials, loading, toast, fmtDate } from './ui.js';
 
 const ROTAS = {
@@ -130,6 +130,7 @@ export function exigirLicenca() {
 onAuthStateChanged(auth, async (user) => {
   if (!user) return location.replace('login.html');
   try {
+    await carregarPlanos();
     const s = await loadSession(user);
     if (!s) return location.replace('login.html'); // sem clínica -> onboarding
     if (!state.perfil.ativo) {
