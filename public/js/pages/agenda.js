@@ -168,7 +168,7 @@ export async function render(view, { params }) {
   }
 
   // ---------- arrastar e soltar para remarcar ----------
-  let arrastado = null, timerSemana = null;
+  let arrastado = null, timerSemana = null, acabouDeArrastar = false;
 
   async function mover(ag, slot) {
     const novo = slot.slice(0, 14) + ag.inicio.slice(14, 16); // mantém os minutos originais
@@ -202,7 +202,13 @@ export async function render(view, { params }) {
     e.dataTransfer.effectAllowed = 'move';
     requestAnimationFrame(() => ev.classList.add('arrastando'));
   });
-  grid.addEventListener('dragend', () => { limparDrag(); clearTimeout(timerSemana); timerSemana = null; });
+  grid.addEventListener('dragend', () => {
+    limparDrag();
+    clearTimeout(timerSemana);
+    timerSemana = null;
+    acabouDeArrastar = true;
+    setTimeout(() => { acabouDeArrastar = false; }, 0);
+  });
   grid.addEventListener('dragover', (e) => {
     const cell = e.target.closest?.('[data-slot]'); if (!cell || !arrastado) return;
     e.preventDefault();
@@ -228,6 +234,7 @@ export async function render(view, { params }) {
   });
 
   $('#grid', view).onclick = (e) => {
+    if (acabouDeArrastar) return;
     const ev = e.target.closest('[data-id]');
     if (ev) return detalhes(ags.find(a => a.id === ev.dataset.id));
     const cell = e.target.closest('[data-slot]');
