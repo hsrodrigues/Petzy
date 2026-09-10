@@ -79,7 +79,7 @@ input[type=color].form-control { padding: .25rem; height: 42px; }
 .kpi { display: flex; gap: 1rem; align-items: center; }
 .kpi-icon { width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; font-size: 1.35rem; flex-shrink: 0; }
 .kpi-value { font-size: 1.55rem; font-weight: 700; line-height: 1.1; font-family: 'Plus Jakarta Sans', sans-serif; }
-.kpi-label { font-size: .82rem; color: var(--pz-muted); }
+.kpi-label { font-size: .82rem; color: var(--pz-muted); overflow-wrap: normal; word-break: normal; }
 
 /* ---------- Tabelas ---------- */
 .table { --bs-table-bg: transparent; margin-bottom: 0; }
@@ -159,6 +159,13 @@ input[type=color].form-control { padding: .25rem; height: 42px; }
   .app-content { padding: 1rem; }
   .app-topbar { padding: .75rem 1rem; }
   .sidebar-backdrop { position: fixed; inset: 0; background: rgba(15, 16, 35, .45); z-index: 1035; }
+}
+
+@media (max-width: 575.98px) {
+   .kpi { gap: .7rem; }
+   .kpi-icon { width: 42px; height: 42px; font-size: 1.15rem; }
+   .kpi-value { font-size: clamp(.95rem, 4vw, 1.25rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+   .kpi-label { font-size: .78rem; }
 }
 
 /* ---------- Agenda (semana) ---------- */
