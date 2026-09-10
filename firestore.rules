@@ -1,79 +1,124 @@
 rules_version = '2';
 
 // ============================================================
-//  VetFlow - Regras de seguranca (multi-tenant por clinica)
-//  Cada usuario tem um doc em /usuarios/{uid} apontando para
-//  a clinica a qual pertence. Todo dado operacional vive em
-//  /clinicas/{clinicaId}/... e so e acessivel por membros ativos.
+//  Petzy - Regras de seguranca (SaaS multi-tenant + licenca)
+//  /usuarios/{uid}        -> indice: a qual clinica o usuario pertence
+//  /superadmins/{uid}     -> donos do SaaS (criado manualmente no console)
+//  /clinicas/{cid}        -> tenant (dados + licenca)
+//  /clinicas/{cid}/...    -> dados operacionais da clinica
 // ============================================================
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function logado() {
-      return request.auth != null;
+    function logado() { return request.auth != null; }
+
+    function perfilPath() { return /databases/$(database)/documents/usuarios/$(request.auth.uid); }
+    function temPerfil() { return logado() && exists(perfilPath()); }
+    function perfil() { return get(perfilPath()).data; }
+
+    function superAdmin() {
+      return logado() && exists(/databases/$(database)/documents/superadmins/$(request.auth.uid));
     }
 
-    function perfil() {
-      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
-    }
-
-    function temPerfil() {
-      return logado() && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid));
-    }
-
-    // membro ativo da clinica informada
     function membro(cid) {
       return temPerfil() && perfil().clinicaId == cid && perfil().ativo == true;
     }
+    function admin(cid) { return membro(cid) && perfil().papel == 'admin'; }
 
-    function admin(cid) {
-      return membro(cid) && perfil().papel == 'admin';
+    function clinica(cid) { return get(/databases/$(database)/documents/clinicas/$(cid)).data; }
+
+    // licenca valida = nao bloqueada e dentro da validade
+    function licencaAtiva(cid) {
+      let c = clinica(cid);
+      return c.status in ['trial', 'ativo'] && c.validoAteMs > request.time.toMillis();
+    }
+
+    // campos de cobranca que so o superadmin altera
+    function camposLicenca() {
+      return ['plano', 'status', 'validoAteMs', 'trialAte', 'ownerUid', 'valorMensal'];
+    }
+
+    // ---------- donos do SaaS ----------
+    match /superadmins/{uid} {
+      allow read: if logado() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // ---------- planos (catalogo publico) ----------
+    match /planos/{pid} {
+      allow read: if true;
+      allow write: if superAdmin();
+    }
+
+    // ---------- configuracao global do SaaS (PIX, links de pagamento) ----------
+    match /sistema/{docId} {
+      allow read: if true;
+      allow write: if superAdmin();
+    }
+
+    // ---------- pedidos de assinatura/renovacao (funciona mesmo com licenca vencida) ----------
+    match /solicitacoes/{id} {
+      allow create: if admin(request.resource.data.clinicaId) && request.resource.data.status == 'pendente';
+      allow read: if superAdmin() || (temPerfil() && resource.data.clinicaId == perfil().clinicaId);
+      allow update, delete: if superAdmin();
     }
 
     // ---------- indice global de usuarios ----------
     match /usuarios/{uid} {
-      // o proprio usuario ou um colega da mesma clinica pode ler
       allow read: if logado() && (
-        request.auth.uid == uid ||
+        request.auth.uid == uid || superAdmin() ||
         (temPerfil() && perfil().clinicaId == resource.data.clinicaId)
       );
-
-      // cadastro inicial: o usuario cria o proprio doc
-      allow create: if logado()
-        && request.auth.uid == uid
-        && request.resource.data.keys().hasAll(['clinicaId','papel','nome','email','ativo']);
-
-      // convite de equipe: admin da clinica cria/edita membros
-      allow create: if logado()
-        && admin(request.resource.data.clinicaId);
-
-      allow update: if logado() && (
-        admin(resource.data.clinicaId) ||
-        // o proprio usuario so pode mudar dados de perfil, nunca papel/clinica/ativo
-        (request.auth.uid == uid
-          && request.resource.data.clinicaId == resource.data.clinicaId
-          && request.resource.data.papel == resource.data.papel
-          && request.resource.data.ativo == resource.data.ativo)
+      // cadastro do dono: cria o proprio doc como admin
+      allow create: if logado() && request.auth.uid == uid
+        && request.resource.data.keys().hasAll(['clinicaId', 'papel', 'nome', 'email', 'ativo'])
+        && clinica(request.resource.data.clinicaId).ownerUid == request.auth.uid;
+      // convite de equipe feito pelo admin da clinica
+      allow create: if admin(request.resource.data.clinicaId);
+      allow update: if superAdmin() || admin(resource.data.clinicaId) || (
+        request.auth.uid == uid
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['clinicaId', 'papel', 'ativo'])
       );
-
-      allow delete: if logado() && admin(resource.data.clinicaId);
+      allow delete: if superAdmin() || admin(resource.data.clinicaId);
     }
 
     // ---------- clinica (tenant) ----------
     match /clinicas/{cid} {
-      allow read: if membro(cid);
-      allow create: if logado() && request.resource.data.ownerUid == request.auth.uid;
-      allow update: if admin(cid);
-      allow delete: if false;
+      allow read: if membro(cid) || superAdmin();
 
-      // ---------- todos os dados operacionais da clinica ----------
-      // clientes, pets, agendamentos, atendimentos, vacinas,
-      // produtos, vendas, financeiro, movimentacoes...
-      match /{documento=**} {
-        allow read: if membro(cid);
-        allow create, update: if membro(cid);
-        allow delete: if membro(cid) && perfil().papel in ['admin', 'veterinario'];
+      // nova clinica sempre nasce em trial de no maximo 15 dias
+      allow create: if logado()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.status == 'trial'
+        && request.resource.data.plano == 'trial'
+        && request.resource.data.validoAteMs <= request.time.toMillis() + 15 * 86400000;
+
+      allow update: if superAdmin() || (
+        admin(cid) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(camposLicenca())
+      );
+      allow delete: if superAdmin();
+
+      // faturas da assinatura: clinica so le, superadmin gerencia
+      match /faturas/{fid} {
+        allow read: if membro(cid) || superAdmin();
+        allow write: if superAdmin();
+      }
+
+      // equipe: so admin gerencia
+      match /equipe/{uid} {
+        allow read: if membro(cid) || superAdmin();
+        allow write: if admin(cid);
+      }
+
+      // dados operacionais: leitura sempre; escrita so com licenca ativa
+      match /{colecao}/{docId} {
+        allow read: if membro(cid) || superAdmin();
+        allow create, update: if membro(cid) && licencaAtiva(cid)
+          && !(colecao in ['faturas', 'equipe']);
+        allow delete: if membro(cid) && licencaAtiva(cid)
+          && !(colecao in ['faturas', 'equipe'])
+          && perfil().papel in ['admin', 'veterinario'];
       }
     }
   }

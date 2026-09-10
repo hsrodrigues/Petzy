@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Petzy · Painel SaaS</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="assets/css/style.css" rel="stylesheet">
+</head>
+<body>
+<nav class="navbar bg-dark navbar-dark px-4 py-3">
+  <span class="navbar-brand d-flex align-items-center gap-2 fw-bold"><span class="brand-logo">🐾</span> Petzy <span class="badge bg-primary ms-1">SaaS Admin</span></span>
+  <div class="d-flex gap-2"><a href="app.html" class="btn btn-sm btn-outline-light">Ir para o app</a><button class="btn btn-sm btn-light" id="sair">Sair</button></div>
+</nav>
+
+<main class="container-fluid p-4" id="main"><div class="loading"><div class="spinner-border"></div></div></main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script type="module">
+  import { auth, db, onAuthStateChanged, signOut, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc } from './js/firebase.js';
+  import { PLANOS } from './js/store.js';
+  import { $, esc, money, fmtDate, badge, kpi, toast, formModal, confirmar, norm, toISODate } from './js/ui.js';
+
+  const DIA = 86400000;
+  let clinicas = [], solicitacoes = [], cfg = {};
+
+  $('#sair').onclick = async () => { await signOut(auth); location.replace('login.html'); };
+
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) return location.replace('login.html');
+    const sa = await getDoc(doc(db, 'superadmins', user.uid)).catch(() => null);
+    if (!sa?.exists()) {
+      $('#main').innerHTML = `<div class="empty-state"><i class="bi bi-shield-lock"></i><h5>Acesso restrito</h5>
+        <p>Esta área é exclusiva do dono do Petzy.<br>Para liberar, crie no Firestore o documento <code>superadmins/${user.uid}</code>.</p>
+        <a href="app.html" class="btn btn-primary">Voltar ao app</a></div>`;
+      return;
+    }
+    await carregar();
+  });
+
+  const situacao = (c) => {
+    if (c.status === 'bloqueado') return ['Bloqueada', 'danger'];
+    if (c.status === 'cancelado') return ['Cancelada', 'secondary'];
+    if ((c.validoAteMs || 0) < Date.now()) return ['Vencida', 'danger'];
+    if (c.status === 'trial') return ['Teste', 'info'];
+    if (c.validoAteMs - Date.now() < 5 * DIA) return ['Vence logo', 'warning'];
+    return ['Ativa', 'success'];
+  };
+
+  async function carregar() {
+    const [cs, ss, cf] = await Promise.all([getDocs(collection(db, 'clinicas')), getDocs(collection(db, 'solicitacoes')), getDoc(doc(db, 'sistema', 'config'))]);
+    clinicas = cs.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.criadoEm || '').localeCompare(a.criadoEm || ''));
+    solicitacoes = ss.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => s.status === 'pendente');
+    cfg = cf.exists() ? cf.data() : {};
+    desenhar();
+  }
+
+  function desenhar() {
+    const ativas = clinicas.filter(c => c.status === 'ativo' && c.validoAteMs > Date.now());
+    const mrr = ativas.reduce((s, c) => s + (c.valorMensal || PLANOS[c.plano]?.preco || 0), 0);
+    $('#main').innerHTML = `
+      <div class="page-header"><div><h1>Painel do SaaS</h1><p>Clínicas, licenças e cobranças</p></div>
+        <button class="btn btn-light border" id="btnCfg"><i class="bi bi-gear me-1"></i>Formas de pagamento</button></div>
+      <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-3">${kpi('building', 'Clínicas cadastradas', clinicas.length)}</div>
+        <div class="col-6 col-xl-3">${kpi('check-circle', 'Assinantes ativos', ativas.length, 'success')}</div>
+        <div class="col-6 col-xl-3">${kpi('hourglass', 'Em teste', clinicas.filter(c => c.status === 'trial' && c.validoAteMs > Date.now()).length, 'info')}</div>
+        <div class="col-6 col-xl-3">${kpi('currency-dollar', 'Receita mensal (MRR)', money(mrr), 'warning')}</div>
+      </div>
+      ${solicitacoes.length ? `<div class="card mb-4 border-primary"><div class="card-header text-primary"><i class="bi bi-bell me-1"></i>Pagamentos a confirmar (${solicitacoes.length})</div>
+        <div class="list-group list-group-flush">${solicitacoes.map(s => `<div class="list-group-item d-flex flex-wrap gap-2 align-items-center">
+          <div class="flex-fill"><strong>${esc(s.clinicaNome)}</strong> quer o plano <strong>${esc(PLANOS[s.plano]?.nome)}</strong> (${money(s.valor)})
+          <div class="fs-8 text-muted">${esc(s.solicitanteEmail)} · ${fmtDate(s.criadoEm?.slice(0, 10))}</div></div>
+          <button class="btn btn-sm btn-outline-danger" data-rej="${s.id}">Recusar</button>
+          <button class="btn btn-sm btn-success" data-apr="${s.id}"><i class="bi bi-check2 me-1"></i>Confirmar pagamento</button></div>`).join('')}</div></div>` : ''}
+      <div class="card">
+        <div class="card-header d-flex gap-2 align-items-center"><span>Clínicas</span><input class="form-control ms-auto" style="max-width:280px" id="busca" placeholder="Buscar clínica ou e-mail..."></div>
+        <div class="table-responsive"><table class="table table-hover"><thead><tr><th>Clínica</th><th>Plano</th><th>Situação</th><th>Válida até</th><th>Cadastro</th><th class="text-end">Ações</th></tr></thead><tbody id="tb"></tbody></table></div>
+      </div>`;
+    desenharTabela();
+    $('#busca').oninput = desenharTabela;
+    $('#btnCfg').onclick = configurar;
+    $('#main').onclick = acoes;
+  }
+
+  function desenharTabela() {
+    const q = norm($('#busca')?.value);
+    $('#tb').innerHTML = clinicas.filter(c => !q || norm(c.nome + c.email).includes(q)).map(c => { const [s, cor] = situacao(c); return `<tr>
+      <td><div class="fw-semibold">${esc(c.nome)}</div><div class="fs-8 text-muted">${esc(c.email || '')} · ${esc(c.telefone || '')}</div></td>
+      <td>${esc(PLANOS[c.plano]?.nome || c.plano)}</td><td>${badge(s, cor)}</td>
+      <td class="fs-7">${c.validoAteMs ? new Date(c.validoAteMs).toLocaleDateString('pt-BR') : '—'}</td>
+      <td class="fs-7">${fmtDate(c.criadoEm?.slice(0, 10))}</td>
+      <td class="text-end text-nowrap">
+        ${c.telefone ? `<a class="btn btn-icon btn-light" target="_blank" href="https://wa.me/55${c.telefone.replace(/\D/g, '')}"><i class="bi bi-whatsapp text-success"></i></a>` : ''}
+        <button class="btn btn-sm btn-success" data-pag="${c.id}">Registrar pagamento</button>
+        <button class="btn btn-sm btn-light border" data-trial="${c.id}" title="Estender teste">+7 dias</button>
+        <button class="btn btn-sm ${c.status === 'bloqueado' ? 'btn-outline-success' : 'btn-outline-danger'}" data-blq="${c.id}">${c.status === 'bloqueado' ? 'Desbloquear' : 'Bloquear'}</button>
+      </td></tr>`; }).join('');
+  }
+
+  // renova a licença somando meses a partir de hoje ou da validade atual (o que for maior)
+  async function registrarPagamento(c, { plano, meses, valor, forma }) {
+    const base = Math.max(Date.now(), c.validoAteMs || 0);
+    const validoAteMs = base + meses * 30 * DIA;
+    await updateDoc(doc(db, 'clinicas', c.id), { plano, status: 'ativo', validoAteMs, valorMensal: PLANOS[plano].preco });
+    await addDoc(collection(db, 'clinicas', c.id, 'faturas'), { plano, meses, valor, forma, data: toISODate(), validoAte: toISODate(new Date(validoAteMs)), registradoPor: auth.currentUser.email });
+  }
+
+  function formPagamento(c, sol) {
+    formModal({
+      title: `Pagamento · ${esc(c.nome)}`, size: 'md', submit: 'Confirmar e liberar',
+      values: { plano: sol?.plano || (c.plano === 'trial' ? 'pro' : c.plano), meses: 1, valor: sol?.valor ?? PLANOS[sol?.plano || c.plano]?.preco, forma: 'PIX' },
+      fields: [
+        { name: 'plano', label: 'Plano', type: 'select', required: true, options: ['basico', 'pro', 'premium'].map(k => ({ value: k, label: `${PLANOS[k].nome} (${money(PLANOS[k].preco)})` })), col: 'col-md-6' },
+        { name: 'meses', label: 'Meses', type: 'select', required: true, options: [1, 3, 6, 12].map(n => ({ value: n, label: `${n} mês(es)` })), col: 'col-md-6' },
+        { name: 'valor', label: 'Valor recebido', type: 'money', required: true, col: 'col-md-6' },
+        { name: 'forma', label: 'Forma', type: 'select', options: ['PIX', 'Cartão', 'Boleto', 'Transferência', 'Cortesia'], col: 'col-md-6' }
+      ],
+      onShown: (el) => { const f = el.querySelector('form'); const calc = () => f.valor.value = (PLANOS[f.plano.value].preco * Number(f.meses.value)).toFixed(2); f.plano.onchange = calc; f.meses.onchange = calc; },
+      onSubmit: async (d) => {
+        await registrarPagamento(c, { ...d, meses: Number(d.meses) });
+        if (sol) await updateDoc(doc(db, 'solicitacoes', sol.id), { status: 'aprovado', aprovadoEm: new Date().toISOString() });
+        toast('Licença liberada ✔'); await carregar();
+      }
+    });
+  }
+
+  async function acoes(e) {
+    const b = e.target.closest('button'); if (!b) return;
+    const c = clinicas.find(x => x.id === (b.dataset.pag || b.dataset.trial || b.dataset.blq));
+    if (b.dataset.pag) formPagamento(c);
+    if (b.dataset.trial) { await updateDoc(doc(db, 'clinicas', c.id), { validoAteMs: Math.max(Date.now(), c.validoAteMs || 0) + 7 * DIA }); toast('Teste estendido em 7 dias'); carregar(); }
+    if (b.dataset.blq && await confirmar(`${c.status === 'bloqueado' ? 'Desbloquear' : 'Bloquear'} <strong>${esc(c.nome)}</strong>?`, { danger: c.status !== 'bloqueado' })) {
+      await updateDoc(doc(db, 'clinicas', c.id), { status: c.status === 'bloqueado' ? (c.plano === 'trial' ? 'trial' : 'ativo') : 'bloqueado' }); carregar();
+    }
+    if (b.dataset.apr) { const s = solicitacoes.find(x => x.id === b.dataset.apr); formPagamento(clinicas.find(x => x.id === s.clinicaId), s); }
+    if (b.dataset.rej && await confirmar('Recusar este aviso de pagamento?')) { await updateDoc(doc(db, 'solicitacoes', b.dataset.rej), { status: 'recusado' }); carregar(); }
+  }
+
+  function configurar() {
+    formModal({
+      title: 'Formas de pagamento da licença', values: { pixChave: cfg.pixChave, pixNome: cfg.pixNome, whatsapp: cfg.whatsapp, linkBasico: cfg.links?.basico, linkPro: cfg.links?.pro, linkPremium: cfg.links?.premium },
+      fields: [
+        { name: 'pixChave', label: 'Chave PIX', col: 'col-md-6' }, { name: 'pixNome', label: 'Nome do favorecido', col: 'col-md-6' },
+        { name: 'whatsapp', label: 'WhatsApp do suporte (com DDI)', col: 'col-12', placeholder: '5511999999999' },
+        { type: 'section', label: 'Links de pagamento recorrente (Mercado Pago, Asaas, Stripe...)' },
+        { name: 'linkBasico', label: 'Link plano Básico', col: 'col-12' }, { name: 'linkPro', label: 'Link plano Profissional', col: 'col-12' }, { name: 'linkPremium', label: 'Link plano Premium', col: 'col-12' }
+      ],
+      onSubmit: async (d) => {
+        await setDoc(doc(db, 'sistema', 'config'), { pixChave: d.pixChave, pixNome: d.pixNome, whatsapp: d.whatsapp, links: { basico: d.linkBasico, pro: d.linkPro, premium: d.linkPremium } });
+        toast('Configuração salva'); await carregar();
+      }
+    });
+  }
+</script>
+</body>
+</html>

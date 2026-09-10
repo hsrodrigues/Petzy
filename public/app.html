@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Petzy · Painel</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐾</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="assets/css/style.css" rel="stylesheet">
+</head>
+<body>
+
+<div id="boot" class="vh-100 d-grid" style="place-items:center">
+  <div class="text-center"><div class="brand-logo mx-auto mb-3" style="width:56px;height:56px;font-size:1.6rem">🐾</div><div class="spinner-border"></div></div>
+</div>
+
+<div id="shell" class="d-none">
+  <aside class="app-sidebar" id="sidebar">
+    <a href="#/dashboard" class="brand"><span class="brand-logo">🐾</span> Petzy</a>
+    <nav id="nav"></nav>
+    <div class="sidebar-footer">
+      <div class="plan-card" id="planCard"></div>
+    </div>
+  </aside>
+  <div class="sidebar-backdrop d-none" id="backdrop"></div>
+
+  <div class="app-main">
+    <header class="app-topbar">
+      <button class="btn btn-icon btn-light d-lg-none" id="btnMenu"><i class="bi bi-list fs-5"></i></button>
+      <form class="search position-relative d-none d-md-block" id="globalSearch">
+        <i class="bi bi-search"></i>
+        <input class="form-control" placeholder="Buscar tutor ou pet..." name="q" autocomplete="off">
+      </form>
+      <div class="ms-auto d-flex align-items-center gap-2">
+        <a href="#/agenda" class="btn btn-primary d-none d-sm-inline-flex align-items-center gap-1"><i class="bi bi-plus-lg"></i> Agendar</a>
+        <div class="dropdown">
+          <button class="btn btn-light d-flex align-items-center gap-2 border-0 bg-transparent" data-bs-toggle="dropdown">
+            <span class="avatar" id="userAvatar"></span>
+            <span class="text-start d-none d-md-block lh-sm">
+              <span class="d-block fw-semibold fs-7" id="userName"></span>
+              <span class="d-block text-muted fs-8" id="clinicName"></span>
+            </span>
+            <i class="bi bi-chevron-down fs-8 text-muted"></i>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-2">
+            <li><span class="dropdown-item-text fs-8 text-muted" id="userRole"></span></li>
+            <li><a class="dropdown-item rounded-2" href="#/configuracoes"><i class="bi bi-gear me-2"></i>Configurações</a></li>
+            <li><a class="dropdown-item rounded-2" href="#/assinatura"><i class="bi bi-credit-card me-2"></i>Assinatura</a></li>
+            <li id="superLink" class="d-none"><a class="dropdown-item rounded-2 text-primary" href="admin.html"><i class="bi bi-shield-lock me-2"></i>Painel Petzy (SaaS)</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><button class="dropdown-item rounded-2 text-danger" id="btnLogout"><i class="bi bi-box-arrow-right me-2"></i>Sair</button></li>
+          </ul>
+        </div>
+      </div>
+    </header>
+
+    <div id="licenseBar"></div>
+    <main class="app-content" id="view"></main>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

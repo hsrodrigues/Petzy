@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Petzy · Sistema para clínicas veterinárias e petshops</title>
+  <meta name="description" content="Agenda, prontuário, vacinas, PDV, estoque e financeiro para clínicas veterinárias e petshops. Teste grátis por 14 dias.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐾</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="assets/css/style.css" rel="stylesheet">
+</head>
+<body class="bg-white">
+
+<nav class="navbar navbar-expand-lg landing-nav">
+  <div class="container">
+    <a class="navbar-brand" href="#"><span class="brand-logo">🐾</span> Petzy</a>
+    <button class="navbar-toggler border-0" data-bs-toggle="collapse" data-bs-target="#nv"><span class="navbar-toggler-icon"></span></button>
+    <div class="collapse navbar-collapse" id="nv">
+      <ul class="navbar-nav mx-auto gap-lg-3">
+        <li class="nav-item"><a class="nav-link" href="#recursos">Recursos</a></li>
+        <li class="nav-item"><a class="nav-link" href="#como">Como funciona</a></li>
+        <li class="nav-item"><a class="nav-link" href="#planos">Planos</a></li>
+        <li class="nav-item"><a class="nav-link" href="#faq">Dúvidas</a></li>
+      </ul>
+      <div class="d-flex gap-2">
+        <a href="login.html" class="btn btn-light">Entrar</a>
+        <a href="login.html?cadastro" class="btn btn-primary">Teste grátis</a>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="container">
+    <div class="row align-items-center g-5">
+      <div class="col-lg-6">
+        <span class="hero-pill mb-4"><i class="bi bi-stars"></i> 14 dias grátis · sem cartão</span>
+        <h1 class="mb-4">A gestão da sua clínica e petshop <span class="grad">sem complicação.</span></h1>
+        <p class="lead text-muted mb-4">Agenda, prontuário eletrônico, carteira de vacinas, banho & tosa, PDV, estoque e financeiro. Tudo na nuvem, em qualquer dispositivo.</p>
+        <div class="d-flex gap-2 flex-wrap mb-4">
+          <a href="login.html?cadastro" class="btn btn-gradient btn-lg px-4">Começar agora <i class="bi bi-arrow-right ms-1"></i></a>
+          <a href="#recursos" class="btn btn-light btn-lg border">Ver recursos</a>
+        </div>
+        <div class="d-flex gap-4 text-muted fs-7 flex-wrap">
+          <span><i class="bi bi-shield-check text-success me-1"></i>Dados protegidos</span>
+          <span><i class="bi bi-phone text-success me-1"></i>Funciona no celular</span>
+          <span><i class="bi bi-lightning-charge text-success me-1"></i>Pronto em 2 minutos</span>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="hero-mock">
+          <div class="bar"><span></span><span></span><span></span></div>
+          <div class="p-3 bg-body-tertiary">
+            <div class="row g-2 mb-2">
+              <div class="col-6"><div class="card"><div class="card-body p-3 kpi"><div class="kpi-icon badge-soft-primary"><i class="bi bi-calendar-check"></i></div><div><div class="kpi-value">18</div><div class="kpi-label">Agendamentos hoje</div></div></div></div></div>
+              <div class="col-6"><div class="card"><div class="card-body p-3 kpi"><div class="kpi-icon badge-soft-success"><i class="bi bi-graph-up-arrow"></i></div><div><div class="kpi-value">R$ 42,8k</div><div class="kpi-label">Receita do mês</div></div></div></div></div>
+            </div>
+            <div class="card"><div class="list-group list-group-flush fs-7">
+              <div class="list-group-item d-flex gap-3 align-items-center"><strong>09:00</strong><span class="flex-fill">🐶 Thor · Consulta</span><span class="badge badge-soft-success">Concluído</span></div>
+              <div class="list-group-item d-flex gap-3 align-items-center"><strong>10:30</strong><span class="flex-fill">🐱 Luna · Vacina V4</span><span class="badge badge-soft-warning">Em atendimento</span></div>
+              <div class="list-group-item d-flex gap-3 align-items-center"><strong>11:00</strong><span class="flex-fill">🐶 Mel · Banho & Tosa</span><span class="badge badge-soft-primary">Confirmado</span></div>
+              <div class="list-group-item d-flex gap-3 align-items-center"><strong>14:00</strong><span class="flex-fill">🐶 Zeus · Retorno</span><span class="badge badge-soft-secondary">Agendado</span></div>
+            </div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="section" id="recursos">
+  <div class="container">
+    <div class="text-center mb-5" style="max-width:640px;margin:auto">
+      <span class="hero-pill mb-3">Recursos</span>
+      <h2 class="section-title">Tudo o que sua clínica precisa, em um só lugar</h2>
+      <p class="text-muted">Deixe as planilhas e o caderno de lado. Menos tempo com burocracia, mais tempo com os pets.</p>
+    </div>
+    <div class="row g-4" id="features"></div>
+  </div>
+</section>
+
+<section class="section bg-body-tertiary" id="como">
+  <div class="container">
+    <div class="text-center mb-5"><h2 class="section-title">Comece em 3 passos</h2></div>
+    <div class="row g-4 text-center">
+      <div class="col-md-4"><div class="display-5 fw-bold text-primary mb-2">1</div><h5 class="fw-bold">Crie sua conta</h5><p class="text-muted">Com e-mail ou Google, em menos de 1 minuto.</p></div>
+      <div class="col-md-4"><div class="display-5 fw-bold text-primary mb-2">2</div><h5 class="fw-bold">Cadastre sua equipe</h5><p class="text-muted">Veterinários, recepção e groomers, cada um com seu acesso.</p></div>
+      <div class="col-md-4"><div class="display-5 fw-bold text-primary mb-2">3</div><h5 class="fw-bold">Comece a atender</h5><p class="text-muted">Agende, atenda, venda e acompanhe tudo pelo painel.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="planos">
+  <div class="container">
+    <div class="text-center mb-5">
+      <span class="hero-pill mb-3">Planos</span>
+      <h2 class="section-title">Preço justo, sem fidelidade</h2>
+      <p class="text-muted">Todos os planos começam com 14 dias grátis. Cancele quando quiser.</p>
+    </div>
+    <div class="row g-4 justify-content-center" id="pricing"></div>
+  </div>
+</section>
+
+<section class="section bg-body-tertiary" id="faq">
+  <div class="container" style="max-width:780px">
+    <h2 class="section-title text-center mb-4">Perguntas frequentes</h2>
+    <div class="accordion" id="acc">
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="cta-box text-center">
+      <h2 class="fw-bold mb-3">Pronto para modernizar sua clínica?</h2>
+      <p class="opacity-75 mb-4">Junte-se às clínicas e petshops que já usam o Petzy.</p>
+      <a href="login.html?cadastro" class="btn btn-light btn-lg px-5 fw-semibold">Criar conta grátis</a>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container d-flex flex-wrap justify-content-between gap-3">
+    <div><div class="d-flex align-items-center gap-2 text-white fw-bold fs-5 mb-2"><span class="brand-logo">🐾</span> Petzy</div><div class="fs-7">Gestão para clínicas veterinárias e petshops.</div></div>
+    <div class="d-flex gap-4 fs-7"><a href="#recursos">Recursos</a><a href="#planos">Planos</a><a href="login.html">Entrar</a></div>
+  </div>
+  <div class="container fs-8 mt-4 opacity-50">© <span id="ano"></span> Petzy. Todos os direitos reservados.</div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script type="module">
+  import { PLANOS } from './js/store.js';
+  const money = (n) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  document.getElementById('ano').textContent = new Date().getFullYear();
+
+  const F = [
+    ['calendar2-heart', 'primary', 'Agenda inteligente', 'Visão semanal por profissional, alerta de conflito de horário e confirmação por WhatsApp em um clique.'],
+    ['clipboard2-pulse', 'success', 'Prontuário eletrônico', 'Anamnese, sinais vitais, diagnóstico e prescrição, com receita pronta para imprimir.'],
+    ['shield-plus', 'info', 'Carteira de vacinas', 'Cálculo automático do reforço e lista de atrasados para você chamar o tutor de volta.'],
+    ['scissors', 'warning', 'Banho & Tosa', 'Serviços com preço e duração, leva e traz e controle do que já foi faturado.'],
+    ['cart-check', 'danger', 'PDV com leitor de código', 'Venda rápida de produtos e serviços, baixa automática no estoque e cupom.'],
+    ['box-seam', 'primary', 'Estoque', 'Entradas, saídas, estoque mínimo, validade e margem de lucro por produto.'],
+    ['cash-coin', 'success', 'Financeiro', 'Contas a pagar e a receber, lançamentos recorrentes e fluxo de caixa mensal.'],
+    ['bar-chart-line', 'info', 'Relatórios', 'Faturamento, ticket médio, taxa de faltas, produtos mais vendidos e melhores clientes.'],
+    ['people', 'warning', 'Equipe e permissões', 'Admin, veterinário, recepção e groomer, cada um vendo só o que precisa.']
+  ];
+  document.getElementById('features').innerHTML = F.map(([i, c, t, d]) => `
+    <div class="col-md-6 col-lg-4"><div class="feature-card">
+      <div class="ic badge-soft-${c}"><i class="bi bi-${i}"></i></div>
+      <h5 class="fw-bold">${t}</h5><p class="text-muted mb-0">${d}</p>
+    </div></div>`).join('');
+
+  document.getElementById('pricing').innerHTML = ['basico', 'pro', 'premium'].map(k => { const p = PLANOS[k]; return `
+    <div class="col-md-6 col-lg-4"><div class="price-card ${p.destaque ? 'featured' : ''}">
+      ${p.destaque ? '<span class="badge bg-primary position-absolute top-0 start-50 translate-middle px-3 py-2">Mais escolhido</span>' : ''}
+      <h5 class="fw-bold">${p.nome}</h5>
+      <div class="price">${money(p.preco)}<span class="fs-6 text-muted fw-normal">/mês</span></div>
+      <ul>${p.recursos.map(r => `<li><i class="bi bi-check-circle-fill"></i>${r}</li>`).join('')}</ul>
+      <a href="login.html?cadastro" class="btn ${p.destaque ? 'btn-primary' : 'btn-outline-primary'} w-100 btn-lg">Testar grátis</a>
+    </div></div>`; }).join('');
+
+  const Q = [
+    ['Preciso instalar alguma coisa?', 'Não. O Petzy funciona no navegador do computador, tablet ou celular.'],
+    ['Meus dados ficam seguros?', 'Sim. Os dados ficam na infraestrutura do Google (Firebase), com regras que isolam totalmente cada clínica.'],
+    ['O que acontece depois dos 14 dias?', 'Você escolhe um plano. Se não assinar, a conta fica em modo somente leitura e nada é apagado.'],
+    ['Posso cancelar quando quiser?', 'Sim, não existe fidelidade. Você paga mês a mês.'],
+    ['Serve para petshop sem veterinário?', 'Sim. Você pode usar só agenda, banho & tosa, PDV, estoque e financeiro.']
+  ];
+  document.getElementById('acc').innerHTML = Q.map(([q, a], i) => `
+    <div class="accordion-item border-0 mb-2 rounded-3 overflow-hidden">
+      <h3 class="accordion-header"><button class="accordion-button ${i ? 'collapsed' : ''} fw-semibold" data-bs-toggle="collapse" data-bs-target="#q${i}">${q}</button></h3>
+      <div id="q${i}" class="accordion-collapse collapse ${i ? '' : 'show'}" data-bs-parent="#acc"><div class="accordion-body text-muted">${a}</div></div>
+    </div>`).join('');
+</script>
+</body>
+</html>
