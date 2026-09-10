@@ -1,4 +1,4 @@
-import { list, save, remove, create, bumpEstoque } from '../store.js';
+import { list, save, remove, create, update, bumpEstoque } from '../store.js';
 import { $, esc, pageHeader, empty, formModal, confirmar, toast, money, num, badge, kpi, norm, debounce, exportCSV } from '../ui.js';
 import { exigirLicenca } from '../app.js';
 
@@ -109,19 +109,54 @@ export async function render(view) {
   function movimentar(p) {
     if (!exigirLicenca()) return;
     formModal({
-      title: `Movimentar estoque · ${esc(p.nome)}`, size: 'md', values: { tipo: 'entrada' },
+      title: `Movimentar estoque · ${esc(p.nome)}`, size: 'md', values: { tipo: 'entrada', custoUnitario: p.precoCusto || 0, vencimento: new Date().toISOString().slice(0, 10), gerarFinanceiro: true },
       fields: [
         { type: 'custom', col: 'col-12', html: `<div class="bg-light rounded-3 p-3 text-center">Estoque atual: <strong class="fs-5">${num(p.estoque || 0)} ${p.unidade || 'un'}</strong></div>` },
         { name: 'tipo', label: 'Tipo', type: 'select', required: true, options: [{ value: 'entrada', label: 'Entrada (compra)' }, { value: 'saida', label: 'Saída (perda/uso interno)' }, { value: 'ajuste', label: 'Ajuste (definir quantidade)' }], col: 'col-md-6' },
         { name: 'quantidade', label: 'Quantidade', type: 'number', step: '0.01', required: true, col: 'col-md-6' },
-        { name: 'motivo', label: 'Observação / fornecedor / NF', col: 'col-12' }
+        { name: 'custoUnitario', label: 'Custo unitário', type: 'money', col: 'col-md-6', attrs: 'data-compra' },
+        { name: 'totalCompra', label: 'Total da compra', type: 'money', col: 'col-md-6', attrs: 'data-compra readonly' },
+        { name: 'fornecedor', label: 'Fornecedor', col: 'col-md-6', attrs: 'data-compra' },
+        { name: 'notaFiscal', label: 'NF / documento', col: 'col-md-6', attrs: 'data-compra' },
+        { name: 'vencimento', label: 'Vencimento da compra', type: 'date', col: 'col-md-6', attrs: 'data-compra' },
+        { name: 'formaPagamento', label: 'Forma de pagamento', type: 'select', options: ['Boleto', 'PIX', 'Transferência', 'Cartão', 'Dinheiro', 'A definir'], col: 'col-md-6', attrs: 'data-compra' },
+        { name: 'pago', label: 'Compra já paga', type: 'checkbox', col: 'col-md-6', attrs: 'data-compra' },
+        { name: 'gerarFinanceiro', label: 'Lançar compra no Financeiro', type: 'checkbox', col: 'col-md-6', attrs: 'data-compra' },
+        { name: 'motivo', label: 'Observação', col: 'col-12' }
       ],
+      onShown: (el) => {
+        const f = $('form', el);
+        const camposCompra = () => el.querySelectorAll('[data-compra]');
+        const alternarCampos = () => {
+          const entrada = f.tipo.value === 'entrada';
+          camposCompra().forEach(c => c.closest('[class*="col-"]')?.classList.toggle('d-none', !entrada));
+          if (entrada) atualizarTotal();
+        };
+        const atualizarTotal = () => { f.totalCompra.value = ((Number(f.quantidade.value) || 0) * (Number(f.custoUnitario.value) || 0)).toFixed(2); };
+        f.tipo.onchange = alternarCampos;
+        f.quantidade.oninput = f.custoUnitario.oninput = atualizarTotal;
+        alternarCampos();
+      },
       onSubmit: async (d) => {
         const atual = p.estoque || 0;
         const delta = d.tipo === 'entrada' ? d.quantidade : d.tipo === 'saida' ? -d.quantidade : d.quantidade - atual;
         await bumpEstoque(p.id, delta);
-        await create('movimentacoes', { produtoId: p.id, produto: p.nome, tipo: d.tipo, quantidade: delta, motivo: d.motivo, data: new Date().toISOString() });
-        toast('Estoque atualizado'); await recarregar();
+        const movimentoId = await create('movimentacoes', {
+          produtoId: p.id, produto: p.nome, tipo: d.tipo, quantidade: delta, motivo: d.motivo,
+          fornecedor: d.fornecedor, notaFiscal: d.notaFiscal, custoUnitario: Number(d.custoUnitario) || 0,
+          totalCompra: Number(d.totalCompra) || 0, data: new Date().toISOString()
+        });
+        if (d.tipo === 'entrada' && Number(d.custoUnitario) > 0) await update('produtos', p.id, { precoCusto: Number(d.custoUnitario) });
+        if (d.tipo === 'entrada' && d.gerarFinanceiro && Number(d.totalCompra) > 0) {
+          await create('financeiro', {
+            tipo: 'despesa', categoria: 'Fornecedores', descricao: `Compra de ${p.nome}${d.fornecedor ? ' · ' + d.fornecedor : ''}`,
+            valor: Number(d.totalCompra), vencimento: d.vencimento || new Date().toISOString().slice(0, 10),
+            pago: Boolean(d.pago), pagoEm: d.pago ? new Date().toISOString().slice(0, 10) : null,
+            formaPagamento: d.formaPagamento || 'A definir', fornecedor: d.fornecedor || '', notaFiscal: d.notaFiscal || '',
+            origem: 'movimentacao', origemId: movimentoId, produtoId: p.id
+          });
+        }
+        toast(d.tipo === 'entrada' && d.gerarFinanceiro ? 'Entrada registrada e compra lançada no Financeiro' : 'Estoque atualizado'); await recarregar();
       }
     });
   }
