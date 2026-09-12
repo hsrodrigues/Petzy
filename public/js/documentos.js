@@ -1,6 +1,7 @@
 // ================= Emissão de documentos: coleta dados extras, pré-visualiza e imprime =================
 import { state, list, where } from './store.js';
 import { $, formModal, modal, toast, today } from './ui.js';
+import { chamarFuncao, mensagemErroFuncao } from './firebase.js';
 import * as D from './docs.js';
 
 export const TIPOS_DOC = {
@@ -8,6 +9,7 @@ export const TIPOS_DOC = {
   receitaControle: { t: 'Receita de controle especial', i: 'file-earmark-lock' },
   prontuario: { t: 'Prontuário completo', i: 'file-earmark-medical' },
   exames: { t: 'Solicitação de exames', i: 'eyedropper' },
+  laudo: { t: 'Laudo', i: 'file-earmark-medical' },
   atestado: { t: 'Atestado de saúde', i: 'patch-check' },
   termo: { t: 'Termo de consentimento', i: 'pen' },
   carteira: { t: 'Carteira de vacinação', i: 'shield-check' }
@@ -68,6 +70,38 @@ export async function gerarDocumento(tipo, { pet, tutor = {}, atendimento: a } =
             if (!exames.length && !d.outros) throw new Error('Marque ao menos um exame.');
             previsualizar(D.solicitacaoExames({ ...base, ...d, exames, data: today() }), titulo);
           }
+        });
+
+      case 'laudo':
+        return formModal({
+          title: 'Laudo', size: 'lg', submit: 'Gerar laudo',
+          values: { tipoExame: a?.tipoLaudo || '' },
+          fields: [
+            { name: 'tipoExame', label: 'Tipo de exame', type: 'select', required: true, col: 'col-12', options: D.TIPOS_LAUDO },
+            { name: 'achados', label: 'Achados', type: 'textarea', rows: 4, required: true, col: 'col-12',
+              placeholder: 'Escreva em bullet points soltos (ex.: "nódulo hepático 2cm, bordas irregulares") ou já no formato final — os dois funcionam.' },
+            { type: 'custom', col: 'col-12', html: `<button type="button" class="btn btn-sm btn-soft mb-3" id="btnLaudoIA"><i class="bi bi-stars me-1"></i>Gerar laudo completo com IA</button>
+              <div class="fs-8 text-muted mb-3">A IA reescreve seus apontamentos e rascunha conclusão e recomendações a partir deles — revise sempre antes de emitir.</div>` },
+            { name: 'conclusao', label: 'Conclusão / impressão diagnóstica', type: 'textarea', rows: 2, col: 'col-12' },
+            { name: 'recomendacoes', label: 'Recomendações', type: 'textarea', rows: 2, col: 'col-12' }
+          ],
+          onShown: (el) => {
+            const f = $('form', el);
+            const btn = $('#btnLaudoIA', el);
+            btn.onclick = async () => {
+              if (!f.achados.value.trim()) return toast('Escreva ao menos um apontamento antes de pedir a redação com IA.', 'warning');
+              btn.disabled = true; const html = btn.innerHTML; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Gerando...';
+              try {
+                const r = await chamarFuncao('redigirLaudoIA', { tipoExame: f.tipoExame.value, achados: f.achados.value, especie: pet?.especie || '' });
+                f.achados.value = r.achados;
+                if (r.conclusao) f.conclusao.value = r.conclusao;
+                if (r.recomendacoes) f.recomendacoes.value = r.recomendacoes;
+                toast('Laudo gerado pela IA — revise achados, conclusão e recomendações antes de emitir.');
+              } catch (err) { toast(mensagemErroFuncao(err), 'danger'); }
+              finally { btn.disabled = false; btn.innerHTML = html; }
+            };
+          },
+          onSubmit: async (d) => previsualizar(D.laudo({ ...base, ...d, data: today() }), titulo)
         });
 
       case 'atestado':

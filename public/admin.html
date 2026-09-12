@@ -20,7 +20,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script type="module">
-  import { auth, db, onAuthStateChanged, signOut, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc } from './js/firebase.js';
+  import { auth, db, onAuthStateChanged, signOut, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, chamarFuncao } from './js/firebase.js';
   import { PLANOS, carregarPlanos } from './js/store.js';
   import { $, esc, money, fmtDate, badge, kpi, toast, formModal, modal, confirmar, norm, toISODate } from './js/ui.js';
   import { renderPix, txid, linkPagamento, copiar } from './js/pix.js';
@@ -28,10 +28,10 @@
   const DIA = 86400000;
   let clinicas = [], solicitacoes = [], cfg = {};
 
-  $('#sair').onclick = async () => { await signOut(auth); location.replace('login.html'); };
+  $('#sair').onclick = async () => { await signOut(auth); location.replace('admin-login.html'); };
 
   onAuthStateChanged(auth, async (user) => {
-    if (!user) return location.replace('login.html');
+    if (!user) return location.replace('admin-login.html');
     const sa = await getDoc(doc(db, 'superadmins', user.uid)).catch(() => null);
     if (!sa?.exists()) {
       $('#main').innerHTML = `<div class="empty-state"><i class="bi bi-shield-lock"></i><h5>Acesso restrito</h5>
@@ -66,7 +66,9 @@
     $('#main').innerHTML = `
       <div class="page-header"><div><h1>Painel do SaaS</h1><p>Clínicas, licenças e cobranças</p></div>
         <div class="d-flex gap-2"><button class="btn btn-light border" id="btnPlanos"><i class="bi bi-tags me-1"></i>Planos e preços</button>
-        <button class="btn btn-light border" id="btnCfg"><i class="bi bi-gear me-1"></i>Formas de pagamento</button></div></div>
+        <button class="btn btn-light border" id="btnCfg"><i class="bi bi-gear me-1"></i>Formas de pagamento</button>
+        <button class="btn btn-light border" id="btnFiscal"><i class="bi bi-receipt-cutoff me-1"></i>Integração fiscal</button>
+        <button class="btn btn-light border" id="btnLegal"><i class="bi bi-file-earmark-text me-1"></i>Dados legais</button></div></div>
       <div class="row g-3 mb-4">
         <div class="col-6 col-xl-3">${kpi('building', 'Clínicas cadastradas', clinicas.length)}</div>
         <div class="col-6 col-xl-3">${kpi('check-circle', 'Assinantes ativos', ativas.length, 'success')}</div>
@@ -87,7 +89,30 @@
     $('#busca').oninput = desenharTabela;
     $('#btnCfg').onclick = configurar;
     $('#btnPlanos').onclick = configurarPlanos;
+    $('#btnFiscal').onclick = configurarFiscal;
+    $('#btnLegal').onclick = configurarLegal;
     $('#main').onclick = acoes;
+  }
+
+  // Token de produção da conta PlugNotas da plataforma: validado na TecnoSpeed e guardado no Secret Manager
+  async function configurarFiscal() {
+    const meta = (await getDoc(doc(db, 'admin', 'integracaoFiscal')).catch(() => null))?.data() || {};
+    const quando = meta.tokenConfiguradoEm?.toDate?.().toLocaleString('pt-BR');
+    formModal({
+      title: 'Integração fiscal · TecnoSpeed', size: 'md', submit: 'Validar e salvar token',
+      fields: [
+        { type: 'custom', col: 'col-12', html: `<div class="alert alert-${quando ? 'success' : 'warning'} fs-7 mb-0">${quando
+          ? `Token de produção configurado em <strong>${esc(quando)}</strong>.`
+          : 'Nenhum token de produção configurado. As clínicas conseguem emitir apenas no <strong>modo teste</strong> (sem valor fiscal).'}</div>` },
+        { name: 'token', label: 'Token de produção da conta PlugNotas', type: 'password', required: true, col: 'col-12', attrs: 'autocomplete="new-password" minlength="10"' },
+        { type: 'custom', col: 'col-12', html: '<div class="text-muted fs-8"><i class="bi bi-shield-lock me-1"></i>O token é validado na TecnoSpeed e gravado no Secret Manager do Google Cloud. Ele não fica no navegador nem no banco de dados, e a troca vale para todas as clínicas em até 1 minuto.</div>' }
+      ],
+      onSubmit: async (d) => {
+        try { await chamarFuncao('configurarTokenTecnoSpeed', { token: d.token }); }
+        catch (e) { throw new Error(e.code === 'functions/internal' && e.message === 'internal' ? 'O serviço fiscal está indisponível no momento.' : e.message); }
+        toast('Token da TecnoSpeed validado e salvo com segurança');
+      }
+    });
   }
 
   function configurarPlanos() {
@@ -114,7 +139,7 @@
   function desenharTabela() {
     const q = norm($('#busca')?.value);
     $('#tb').innerHTML = clinicas.filter(c => !q || norm(c.nome + c.email).includes(q)).map(c => { const [s, cor] = situacao(c); return `<tr>
-      <td><div class="fw-semibold">${esc(c.nome)}</div><div class="fs-8 text-muted">${esc(c.email || '')} · ${esc(c.telefone || '')}</div></td>
+      <td><div class="fw-semibold">${esc(c.nome)}</div><div class="fs-8 text-muted">${esc(c.email || '')} · ${esc(c.telefone || '')}</div>${c.redeId ? `<span class="badge badge-soft-info mt-1"><i class="bi bi-diagram-3 me-1"></i>Rede: ${esc(c.redeId)}</span>` : ''}</td>
       <td>${esc(PLANOS[c.plano]?.nome || c.plano)}</td><td>${badge(s, cor)}</td>
       <td class="fs-7">${c.validoAteMs ? new Date(c.validoAteMs).toLocaleDateString('pt-BR') : '—'}</td>
       <td class="fs-7">${fmtDate(c.criadoEm?.slice(0, 10))}</td>
@@ -123,6 +148,7 @@
         <button class="btn btn-sm btn-primary" data-cob="${c.id}"><i class="bi bi-qr-code me-1"></i>Cobrar</button>
         <button class="btn btn-sm btn-success" data-pag="${c.id}">Registrar pagamento</button>
         <button class="btn btn-sm btn-light border" data-trial="${c.id}" title="Estender teste">+7 dias</button>
+        <button class="btn btn-sm btn-light border" data-rede="${c.id}" title="Agrupar em rede"><i class="bi bi-diagram-3"></i></button>
         <button class="btn btn-sm ${c.status === 'bloqueado' ? 'btn-outline-success' : 'btn-outline-danger'}" data-blq="${c.id}">${c.status === 'bloqueado' ? 'Desbloquear' : 'Bloquear'}</button>
       </td></tr>`; }).join('');
   }
@@ -156,11 +182,29 @@
     });
   }
 
+  function formRede(c) {
+    const outrasRedes = [...new Set(clinicas.filter(x => x.redeId && x.id !== c.id).map(x => x.redeId))];
+    formModal({
+      title: `Rede · ${esc(c.nome)}`, size: 'sm', submit: 'Salvar', values: { redeId: c.redeId || '' },
+      fields: [
+        { name: 'redeId', label: 'Identificador da rede', col: 'col-12', placeholder: 'ex.: grupo-amigo-fiel', attrs: 'list="redesExistentes"' },
+        { type: 'custom', col: 'col-12', html: `<datalist id="redesExistentes">${outrasRedes.map(r => `<option value="${esc(r)}">`).join('')}</datalist>
+          <div class="fs-8 text-muted">Use o <strong>mesmo texto</strong> em todas as unidades do mesmo dono para agrupá-las. Deixe em branco para tirar esta clínica de qualquer rede.</div>` }
+      ],
+      onSubmit: async (d) => {
+        await updateDoc(doc(db, 'clinicas', c.id), { redeId: d.redeId.trim() || null });
+        toast(d.redeId.trim() ? 'Clínica agrupada na rede' : 'Clínica removida da rede');
+        await carregar();
+      }
+    });
+  }
+
   async function acoes(e) {
     const b = e.target.closest('button'); if (!b) return;
-    const c = clinicas.find(x => x.id === (b.dataset.pag || b.dataset.trial || b.dataset.blq || b.dataset.cob));
+    const c = clinicas.find(x => x.id === (b.dataset.pag || b.dataset.trial || b.dataset.blq || b.dataset.cob || b.dataset.rede));
     if (b.dataset.cob) cobrar(c);
     if (b.dataset.pag) formPagamento(c);
+    if (b.dataset.rede) formRede(c);
     if (b.dataset.trial) { await updateDoc(doc(db, 'clinicas', c.id), { validoAteMs: Math.max(Date.now(), c.validoAteMs || 0) + 7 * DIA }); toast('Teste estendido em 7 dias'); carregar(); }
     if (b.dataset.blq && await confirmar(`${c.status === 'bloqueado' ? 'Desbloquear' : 'Bloquear'} <strong>${esc(c.nome)}</strong>?`, { danger: c.status !== 'bloqueado' })) {
       await updateDoc(doc(db, 'clinicas', c.id), { status: c.status === 'bloqueado' ? (c.plano === 'trial' ? 'trial' : 'ativo') : 'bloqueado' }); carregar();
@@ -225,6 +269,34 @@
       onSubmit: async (d) => {
         await setDoc(doc(db, 'sistema', 'config'), { pixChave: d.pixChave, pixNome: d.pixNome, pixCidade: d.pixCidade, whatsapp: d.whatsapp, links: { basico: d.linkBasico, pro: d.linkPro, premium: d.linkPremium } });
         toast('Configuração salva'); await carregar();
+      }
+    });
+  }
+
+  // Dados usados nas páginas públicas de Termos de Uso e Política de Privacidade (termos.html/
+  // privacidade.html) — ficam em /sistema/legal, leitura pública (qualquer visitante vê essas duas
+  // páginas sem estar logado), escrita só pelo superadmin.
+  async function configurarLegal() {
+    const legal = (await getDoc(doc(db, 'sistema', 'legal')).catch(() => null))?.data() || {};
+    formModal({
+      title: 'Dados legais (Termos de Uso e Privacidade)', size: 'lg', submit: 'Salvar',
+      values: legal,
+      fields: [
+        { type: 'custom', col: 'col-12', html: '<div class="alert alert-info fs-7">Esses dados aparecem automaticamente nas páginas públicas <code>termos.html</code> e <code>privacidade.html</code>. Recomendamos revisão de um(a) advogado(a) antes de tratar como definitivo.</div>' },
+        { name: 'razaoSocial', label: 'Razão social ou nome completo (responsável legal)', required: true, col: 'col-12' },
+        { name: 'cnpjCpf', label: 'CNPJ ou CPF', required: true, col: 'col-md-6' },
+        { name: 'ie', label: 'Inscrição estadual/municipal (opcional)', col: 'col-md-6' },
+        { name: 'endereco', label: 'Endereço completo', col: 'col-12' },
+        { name: 'foroCidade', label: 'Cidade do foro', required: true, col: 'col-md-8' },
+        { name: 'foroUf', label: 'UF', required: true, col: 'col-md-4', attrs: 'maxlength="2" style="text-transform:uppercase"' },
+        { name: 'emailContato', label: 'E-mail de contato / privacidade', type: 'email', required: true, col: 'col-12' },
+        { name: 'prazoRetencaoDias', label: 'Dias de retenção de dados após cancelamento', type: 'number', col: 'col-md-6', default: 90 },
+        { name: 'reajusteAvisoDias', label: 'Dias de aviso prévio para reajuste de preço', type: 'number', col: 'col-md-6', default: 30 }
+      ],
+      onSubmit: async (d) => {
+        d.foroUf = (d.foroUf || '').toUpperCase();
+        await setDoc(doc(db, 'sistema', 'legal'), { ...d, atualizadoEm: new Date().toISOString() });
+        toast('Dados legais salvos — já refletem em termos.html e privacidade.html');
       }
     });
   }

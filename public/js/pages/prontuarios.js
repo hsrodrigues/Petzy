@@ -1,4 +1,5 @@
 import { state, list, save, remove, update, create, loadTutoresPets, orderBy, limit } from '../store.js';
+import { storage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from '../firebase.js';
 import { $, esc, pageHeader, empty, modal, confirmar, toast, fmtDateTime, fmtDate, toISODateTime, toISODate, addDays, today, norm, debounce, idade, badge, kpi, num, fieldHtml, readForm, ativarBusca } from '../ui.js';
 import { exigirLicenca } from '../app.js';
 import { petOptions, emoji } from './pets.js';
@@ -12,7 +13,7 @@ const MEDS = ['Amoxicilina + clavulanato de potássio', 'Cefalexina', 'Enrofloxa
   'Simeticona', 'Probiótico', 'Oclacitinib (Apoquel)', 'Lokivetmab (Cytopoint)', 'Cetoconazol shampoo', 'Clorexidina 2% solução', 'Colírio de tobramicina',
   'Pomada oftálmica (Epitezan)', 'Otológico (Otomax)', 'Ivermectina', 'Milbemicina + praziquantel', 'Fluralaner (Bravecto)', 'Sarolaner (Simparic)',
   'Furosemida', 'Pimobendan', 'Benazepril', 'Levotiroxina', 'Fenobarbital', 'Silimarina', 'Ácido ursodesoxicólico', 'Suplemento vitamínico'];
-const DOCS_ATEND = ['receita', 'receitaControle', 'prontuario', '-', 'exames', 'atestado', 'termo'];
+const DOCS_ATEND = ['receita', 'receitaControle', 'prontuario', '-', 'exames', 'laudo', 'atestado', 'termo'];
 
 // ---------- blocos de HTML do formulário ----------
 const sistemasHtml = (v = {}) => `
@@ -117,6 +118,12 @@ function abas(dados, v) {
     { id: 'receita', t: 'Receita', i: 'prescription2', fields: [
       { type: 'custom', col: 'col-12', html: receitaHtml(v) },
       { name: 'receitaObs', label: 'Observações da receita (saem impressas)', type: 'textarea', rows: 2, col: 'col-12', placeholder: 'Ex.: administrar junto com alimento; retornar se houver vômito.' }
+    ] },
+    { id: 'anexos', t: 'Anexos', i: 'paperclip', fields: [
+      { type: 'custom', col: 'col-12', html: `
+        <label class="form-label">Exames, raio-x, fotos <span class="text-muted fw-normal">(imagem ou PDF, até 8 MB cada)</span></label>
+        <input type="file" class="form-control mb-3" id="anexoInput" accept="image/*,application/pdf" multiple>
+        <div id="anexosLista"></div>` }
     ] }
   ];
 }
@@ -167,7 +174,7 @@ export async function render(view, { params }) {
         <td><a href="#/pets/${a.petId}" class="fw-semibold text-decoration-none">${emoji(P[a.petId]?.especie)} ${esc(P[a.petId]?.nome || '—')}</a>
           <div class="text-muted fs-8">${esc(C[a.clienteId]?.nome || '')}</div></td>
         <td>${badge(a.tipo || 'Consulta', a.tipo === 'Emergência' ? 'danger' : a.tipo === 'Cirurgia' ? 'warning' : 'primary')}</td>
-        <td class="fs-7">${esc(a.diagnostico || '—')}${a.retorno ? `<div class="fs-8 text-muted"><i class="bi bi-arrow-repeat"></i> retorno ${fmtDate(a.retorno)}</div>` : ''}</td>
+        <td class="fs-7">${esc(a.diagnostico || '—')}${a.anexos?.length ? ` <i class="bi bi-paperclip text-muted" title="${a.anexos.length} anexo(s)"></i>` : ''}${a.retorno ? `<div class="fs-8 text-muted"><i class="bi bi-arrow-repeat"></i> retorno ${fmtDate(a.retorno)}</div>` : ''}</td>
         <td class="fs-8 text-muted" style="max-width:220px">${meds.length ? esc(meds.map(i => i.medicamento).join(', ')) : a.prescricao ? 'texto livre' : '—'}</td>
         <td class="fs-7">${esc(a.vetNome || '')}</td>
         <td class="text-end text-nowrap">
@@ -182,7 +189,8 @@ export async function render(view, { params }) {
     }).join('') : `<tr><td colspan="7">${empty('clipboard2-pulse', atend.length ? 'Nenhum atendimento encontrado.' : 'Nenhum atendimento registrado ainda.')}</td></tr>`;
   }
 
-  async function recarregar() { atend = await list('atendimentos', orderBy('data', 'desc'), limit(300)); desenhar(); }
+  const telaAtiva = view.firstElementChild; // some quando o usuário navega para outra tela
+  async function recarregar() { atend = await list('atendimentos', orderBy('data', 'desc'), limit(300)); if (telaAtiva.isConnected) desenhar(); }
 
   const doc = (tipo, a) => gerarDocumento(tipo, { pet: P[a.petId] || {}, tutor: C[a.clienteId] || {}, atendimento: a });
 
@@ -275,6 +283,50 @@ export async function render(view, { params }) {
     if (v.peso) $('#cdPeso', el).value = v.peso;
     form.peso.addEventListener('input', () => { $('#cdPeso', el).value = form.peso.value; calc(); });
 
+    // ---------- anexos (exames, raio-x, fotos) ----------
+    // Guarda só o caminho no Storage (nunca a URL com token de download): a URL é buscada na hora de
+    // abrir, autenticada pelo SDK — assim ela nunca vaza fora das regras de acesso da clínica.
+    let anexos = (v.anexos || []).map(x => ({ ...x }));
+    const sessaoAnexos = a.id || ('novo' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+    const iconeAnexo = (tipo) => tipo === 'application/pdf' ? 'file-earmark-pdf text-danger' : 'file-earmark-image text-primary';
+    function desenharAnexos() {
+      $('#anexosLista', el).innerHTML = anexos.length ? anexos.map((x, i) => `
+        <div class="d-flex align-items-center gap-2 border rounded-3 p-2 mb-2">
+          <i class="bi bi-${iconeAnexo(x.tipo)} fs-4"></i>
+          <div class="flex-fill fs-7">${esc(x.nome)} <span class="text-muted fs-8">· ${num((x.tamanho || 0) / 1024, 0)} KB</span></div>
+          <button type="button" class="btn btn-sm btn-light border" data-ver-anexo="${i}"><i class="bi bi-eye"></i></button>
+          <button type="button" class="btn btn-sm btn-light border" data-rm-anexo="${i}"><i class="bi bi-trash text-danger"></i></button>
+        </div>`).join('') : '<div class="text-muted fs-7 border rounded-3 p-3 text-center">Nenhum anexo ainda.</div>';
+    }
+    $('#anexoInput', el).onchange = async (e) => {
+      const arquivos = [...e.target.files]; e.target.value = '';
+      for (const f of arquivos) {
+        if (f.size > 8 * 1024 * 1024) { toast(`"${f.name}" é maior que 8 MB.`, 'warning'); continue; }
+        if (!/^image\//.test(f.type) && f.type !== 'application/pdf') { toast(`"${f.name}" precisa ser imagem ou PDF.`, 'warning'); continue; }
+        const path = `clinicas/${state.clinicaId}/anexos/${sessaoAnexos}/${Date.now()}_${f.name.replace(/[^\w.\-]/g, '_')}`;
+        try {
+          await uploadBytes(storageRef(storage, path), f, { contentType: f.type });
+          anexos.push({ nome: f.name, path, tipo: f.type, tamanho: f.size });
+          desenharAnexos();
+          toast(`"${f.name}" anexado`);
+        } catch (err) { toast(`Falha ao enviar "${f.name}": ${err.message}`, 'danger'); }
+      }
+    };
+    $('#anexosLista', el).onclick = async (e) => {
+      const verBtn = e.target.closest('[data-ver-anexo]'), rmBtn = e.target.closest('[data-rm-anexo]');
+      if (verBtn) {
+        try { window.open(await getDownloadURL(storageRef(storage, anexos[Number(verBtn.dataset.verAnexo)].path)), '_blank'); }
+        catch { toast('Não foi possível abrir o anexo.', 'danger'); }
+      }
+      if (rmBtn) {
+        const i = Number(rmBtn.dataset.rmAnexo);
+        if (!(await confirmar(`Remover o anexo <strong>${esc(anexos[i].nome)}</strong>?`))) return;
+        try { await deleteObject(storageRef(storage, anexos[i].path)); } catch { /* já pode ter sido removido do Storage */ }
+        anexos.splice(i, 1); desenharAnexos();
+      }
+    };
+    desenharAnexos();
+
     // ---------- salvar ----------
     el.querySelectorAll('[data-salvar]').forEach(btn => btn.onclick = async () => {
       if (!form.checkValidity()) {
@@ -292,6 +344,7 @@ export async function render(view, { params }) {
       d.examesSolicitados = [...el.querySelectorAll('[data-exame]:checked')].map(x => x.value);
       d.receita = lerItens();
       d.receitaControle = $('#rxControle', el).checked;
+      d.anexos = anexos;
       d.clienteId = P[d.petId]?.clienteId || null;
       if (!a.id) Object.assign(d, { vetId: state.user.uid, vetNome: state.perfil.nome, vetCrmv: state.perfil.crmv || '' });
 
@@ -344,6 +397,9 @@ export async function render(view, { params }) {
               ${meds.map((i, n) => `<div class="fs-7 py-1 border-bottom"><strong>${n + 1}. ${esc(i.medicamento)} ${esc(i.concentracao || '')}</strong> <span class="text-muted">· ${esc(i.quantidade || '')}</span>
                 <div class="text-muted">${esc(i.posologia || '')} · via ${esc((i.via || '').toLowerCase())}</div></div>`).join('')}</div>` : bloco('Prescrição', a.prescricao)}
             ${bloco('Orientações', a.orientacoes || a.receitaObs)}
+            ${a.anexos?.length ? `<div class="mb-3"><div class="fs-8 text-muted text-uppercase fw-semibold mb-1">Anexos</div>
+              <div class="d-flex flex-wrap gap-2">${a.anexos.map((x, i) => `<button type="button" class="btn btn-sm btn-light border" data-ver-anexo="${i}">
+                <i class="bi bi-${x.tipo === 'application/pdf' ? 'file-earmark-pdf text-danger' : 'file-earmark-image text-primary'} me-1"></i>${esc(x.nome)}</button>`).join('')}</div></div>` : ''}
           </div>
         </div>`,
       footer: `
@@ -353,6 +409,10 @@ export async function render(view, { params }) {
         <button class="btn btn-primary" data-edit><i class="bi bi-pencil me-1"></i>Editar</button>`
     });
     el.querySelectorAll('[data-doc]').forEach(b => b.onclick = () => doc(b.dataset.doc, a));
+    el.querySelectorAll('[data-ver-anexo]').forEach(b => b.onclick = async () => {
+      try { window.open(await getDownloadURL(storageRef(storage, a.anexos[Number(b.dataset.verAnexo)].path)), '_blank'); }
+      catch { toast('Não foi possível abrir o anexo.', 'danger'); }
+    });
     $('[data-edit]', el).onclick = () => { close(); abrirForm(a); };
   }
 
@@ -370,7 +430,10 @@ export async function render(view, { params }) {
     if (b.dataset.ver) ver(a);
     if (b.dataset.edit) abrirForm(a);
     if (b.dataset.del && exigirLicenca() && await confirmar('Excluir este atendimento do prontuário?')) {
-      await remove('atendimentos', a.id); toast('Atendimento excluído'); recarregar();
+      await remove('atendimentos', a.id);
+      // limpeza dos arquivos no Storage (best-effort: se falhar, não impede a exclusão do registro)
+      await Promise.all((a.anexos || []).map(x => deleteObject(storageRef(storage, x.path)).catch(() => {})));
+      toast('Atendimento excluído'); recarregar();
     }
   };
 

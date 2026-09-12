@@ -95,6 +95,32 @@ input[type=color].form-control { padding: .25rem; height: 42px; }
    .kpi-value { font-size: 1.25rem; }
 }
 
+/* ---------- Dashboard: KPIs com tendência, ações rápidas e resumo ---------- */
+.kpi-card { transition: transform .15s ease, box-shadow .15s ease; }
+.kpi-card:hover { transform: translateY(-3px); box-shadow: 0 10px 28px rgba(20, 21, 43, .1); }
+.kpi-icon-v2 { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 1.25rem; flex-shrink: 0; }
+.kpi-value-v2 { font-size: 1.6rem; font-weight: 800; font-family: 'Plus Jakarta Sans', sans-serif; line-height: 1.15; overflow-wrap: anywhere; }
+.kpi-label-v2 { font-size: .82rem; color: var(--pz-muted); margin-top: .15rem; }
+.kpi-trend { font-size: .72rem; font-weight: 700; display: inline-flex; align-items: center; gap: .1rem; padding: .22rem .55rem; border-radius: 999px; background: #eef0f5; color: var(--pz-muted); white-space: nowrap; }
+.kpi-trend.up { background: var(--pz-accent-soft); color: #008a6e; }
+.kpi-trend.down { background: #fee2e2; color: #b91c1c; }
+.kpi-sub { font-size: .72rem; font-weight: 600; color: var(--pz-muted); background: #f3f3f8; padding: .22rem .55rem; border-radius: 999px; white-space: nowrap; }
+@media (max-width: 575.98px) {
+  .kpi-value-v2 { font-size: 1.15rem; }
+  .kpi-icon-v2 { width: 36px; height: 36px; font-size: 1.05rem; }
+  .kpi-trend, .kpi-sub { font-size: .65rem; padding: .18rem .45rem; }
+}
+
+.qa-row { display: flex; gap: .7rem; overflow-x: auto; padding: .2rem .1rem .4rem; scrollbar-width: thin; }
+.qa-tile { flex: 0 0 auto; width: 96px; display: flex; flex-direction: column; align-items: center; gap: .5rem; padding: 1rem .5rem; background: var(--pz-surface); border: 1px solid var(--pz-border); border-radius: 14px; text-decoration: none; color: var(--pz-text); font-size: .76rem; font-weight: 600; text-align: center; transition: all .15s ease; }
+.qa-tile:hover { border-color: var(--pz-primary); box-shadow: 0 8px 20px rgba(108, 92, 231, .14); transform: translateY(-2px); color: var(--pz-text); }
+.qa-ico { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; font-size: 1.2rem; flex-shrink: 0; }
+
+.dash-resumo { font-size: .85rem; color: var(--pz-muted); }
+.dash-resumo a { color: inherit; text-decoration: none; display: inline-flex; align-items: center; gap: .4rem; }
+.dash-resumo a:hover { color: var(--pz-primary); }
+.dash-resumo strong { color: var(--pz-text); font-weight: 700; }
+
 /* ---------- Tabelas ---------- */
 .table { --bs-table-bg: transparent; margin-bottom: 0; }
 .table > :not(caption) > * > * { padding: .8rem 1rem; border-bottom-color: var(--pz-border); }
@@ -125,6 +151,7 @@ input[type=color].form-control { padding: .25rem; height: 42px; }
 .nav-section { font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: #5f6282; padding: 1rem .8rem .4rem; font-weight: 600; }
 .app-sidebar .nav-link { display: flex; align-items: center; gap: .75rem; color: var(--pz-sidebar-text); padding: .6rem .8rem; border-radius: 10px; font-size: .92rem; font-weight: 500; transition: all .15s; }
 .app-sidebar .nav-link i { font-size: 1.1rem; width: 20px; text-align: center; }
+.app-sidebar .nav-link .nav-selo { margin-left: auto; font-size: .62rem; font-weight: 700; }
 .app-sidebar .nav-link:hover { background: rgba(255, 255, 255, .05); color: #fff; }
 .app-sidebar .nav-link.active { background: var(--pz-primary); color: #fff; box-shadow: 0 6px 16px rgba(108, 92, 231, .35); }
 .sidebar-footer { padding: 1rem; border-top: 1px solid rgba(255, 255, 255, .06); }
@@ -305,3 +332,11 @@ input[type=color].form-control { padding: .25rem; height: 42px; }
 .ag-event[draggable=true]:active { cursor: grabbing; }
 .ag-event.arrastando { opacity: .35; }
 .ag-cell.drag-over { background: var(--pz-primary-soft); outline: 2px dashed var(--pz-primary); outline-offset: -3px; }
+
+/* avisos: a área em volta não bloqueia cliques; texto longo ocupa menos linhas; no celular usam a largura útil */
+.toast-container { pointer-events: none; }
+.toast-container .toast { pointer-events: auto; max-width: 420px; }
+@media (max-width: 575.98px) { .toast-container .toast { min-width: 0; width: calc(100vw - 2rem); } }
+
+/* ---------- Indicador de conexão (modo offline) ---------- */
+.badge-offline { display: inline-flex; align-items: center; font-size: .78rem; font-weight: 700; padding: .35rem .7rem; border-radius: 999px; background: #fee2e2; color: #b91c1c; }

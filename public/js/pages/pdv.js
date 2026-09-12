@@ -1,8 +1,10 @@
-import { state, list, col, ref, db, writeBatch, loadTutoresPets, where } from '../store.js';
-import { doc, increment } from '../firebase.js';
-import { $, esc, pageHeader, empty, toast, money, num, norm, debounce, today, toISODate, addDays, fmtDateTime, fmtTime, modal, badge, selectBusca } from '../ui.js';
+import { state, list, get, update, create, col, ref, db, writeBatch, loadTutoresPets, where } from '../store.js';
+import { doc, increment, chamarFuncao, mensagemErroFuncao } from '../firebase.js';
+import { $, esc, pageHeader, empty, toast, money, num, norm, debounce, today, toISODate, addDays, fmtDateTime, fmtTime, modal, badge, selectBusca, agoraLocal } from '../ui.js';
 import { exigirLicenca } from '../app.js';
 import { emoji } from './pets.js';
+import { NCM_SUGERIDO, NCM_LISTA, soDigitos, descricaoNcm } from '../fiscalDados.js';
+import { ligarBuscaNcm } from '../ncm.js';
 
 const PAGAMENTOS = ['PIX', 'Dinheiro', 'Cartão de débito', 'Cartão de crédito', 'Fiado (a receber)'];
 
@@ -55,7 +57,7 @@ export async function render(view) {
 
     <div class="card mt-3">
       <div class="card-header d-flex justify-content-between"><span>Vendas de hoje</span><span class="text-muted fs-7" id="resumoDia"></span></div>
-      <div class="table-responsive"><table class="table"><thead><tr><th>Hora</th><th>Cliente</th><th>Itens</th><th>Pagamento</th><th class="text-end">Total</th><th></th></tr></thead><tbody id="vendas"></tbody></table></div>
+      <div class="table-responsive"><table class="table"><thead><tr><th>Hora</th><th>Cliente</th><th>Itens</th><th>Pagamento</th><th class="text-end">Total</th><th>NFC-e</th><th></th></tr></thead><tbody id="vendas"></tbody></table></div>
     </div>`;
 
   selectBusca($('#cliente', view));
@@ -105,6 +107,21 @@ export async function render(view) {
     desenharCarrinho();
   }
 
+  // estado fiscal usado pela coluna/ações de NFC-e
+  const fiscalCfg = state.clinica?.fiscal || {};
+  const nfceIntegrada = ['tecnospeed', 'plugnotas'].includes(fiscalCfg.provedor);
+  const PRODUTOS = Object.fromEntries(itens.map(p => [p.id, p]));
+  const temProdutos = (v) => (v.itens || []).some(i => i.tipo !== 'servico');
+  const EM_ANDAMENTO = ['enviando', 'processando', 'cancelando'];
+  function nfceCelula(v) {
+    if (!nfceIntegrada || !temProdutos(v)) return '<span class="text-muted fs-8">—</span>';
+    const st = v.nfceStatus;
+    if (st === 'emitida') return `<button class="btn btn-sm btn-light border text-nowrap" data-nfce-pdf="${v.nfceId}" title="Abrir DANFE"><i class="bi bi-file-earmark-pdf text-danger me-1"></i>nº ${esc(v.nfceNumero || '')}</button>`;
+    if (EM_ANDAMENTO.includes(st)) return badge('processando', 'info');
+    if (st === 'cancelada') return badge('cancelada', 'secondary');
+    return `<button class="btn btn-sm btn-soft text-nowrap" data-nfce="${v.id}">${st === 'rejeitada' ? 'Reenviar NFC-e' : 'Emitir NFC-e'}</button>`;
+  }
+
   async function carregarVendas() {
     vendasHoje = await list('vendas', where('data', '>=', today()));
     vendasHoje.sort((a, b) => b.data.localeCompare(a.data));
@@ -114,8 +131,9 @@ export async function render(view) {
       <td class="fs-7">${fmtTime(v.data)}</td><td class="fs-7">${esc(C[v.clienteId]?.nome || 'Consumidor final')}</td>
       <td class="fs-8 text-muted">${esc(v.itens.map(i => `${i.qtd}× ${i.nome}`).join(', '))}</td>
       <td>${badge(v.pagamento, v.pagamento.startsWith('Fiado') ? 'warning' : 'secondary')}</td><td class="text-end fw-semibold">${money(v.total)}</td>
+      <td>${nfceCelula(v)}</td>
       <td class="text-end"><button class="btn btn-icon btn-light" data-cupom="${v.id}" title="Cupom"><i class="bi bi-receipt"></i></button></td></tr>`).join('')
-      : `<tr><td colspan="6" class="text-center text-muted py-4 fs-7">Nenhuma venda hoje ainda.</td></tr>`;
+      : `<tr><td colspan="7" class="text-center text-muted py-4 fs-7">Nenhuma venda hoje ainda.</td></tr>`;
   }
 
   async function finalizar() {
@@ -128,7 +146,7 @@ export async function render(view) {
       const venda = {
         itens: carrinho, clienteId, petId: $('#pet', view).value || null,
         subtotal: subtotal(), desconto: Number($('#desconto', view).value) || 0, total: total(),
-        pagamento, status: 'concluida', data: new Date().toISOString().slice(0, 19),
+        pagamento, status: 'concluida', data: agoraLocal(),
         vendedorId: state.user.uid, vendedor: state.perfil.nome, criadoEm: new Date().toISOString()
       };
       // venda + baixa de estoque + lançamento financeiro numa única transação
@@ -163,8 +181,157 @@ export async function render(view) {
       <div class="d-flex justify-content-between fw-bold fs-6"><span>TOTAL</span><span>${money(v.total)}</span></div>
       <div>Pagamento: ${esc(v.pagamento)}</div>${v.clienteId ? `<div>Cliente: ${esc(C[v.clienteId]?.nome || '')}</div>` : ''}
       <div class="text-center mt-2 fs-8">Obrigado pela preferência! 🐾<br>Documento sem valor fiscal</div></div>`;
-    const { el } = modal({ title: 'Cupom da venda', size: 'sm', body: html, footer: '<button class="btn btn-primary w-100" data-print><i class="bi bi-printer me-1"></i>Imprimir</button>' });
+    const podeNfce = nfceIntegrada && temProdutos(v) && !['emitida', ...EM_ANDAMENTO].includes(v.nfceStatus);
+    const { el, close } = modal({
+      title: 'Cupom da venda', size: 'sm', body: html,
+      footer: `${podeNfce ? `<button class="btn btn-success w-100" data-nfce-cupom><i class="bi bi-receipt-cutoff me-1"></i>Emitir NFC-e${fiscalCfg.ambiente === 'teste' ? ' (teste, sem valor fiscal)' : ''}</button>` : ''}
+        <button class="btn btn-primary w-100" data-print><i class="bi bi-printer me-1"></i>Imprimir cupom</button>`
+    });
+    $('[data-nfce-cupom]', el)?.addEventListener('click', () => {
+      el.addEventListener('hidden.bs.modal', () => emitirNfce(v), { once: true }); // abre o próximo passo só depois de fechar este modal
+      close();
+    });
     $('[data-print]', el).onclick = () => { const w = window.open('', '_blank', 'width=360,height=600'); w.document.write(`<html><body style="margin:10px">${$('#cupom', el).outerHTML.replace(/class="[^"]*"/g, '')}<script>window.print()<\/script></body></html>`); w.document.close(); };
+  }
+
+  // ---------- NFC-e (nota fiscal do balcão) ----------
+  // Mostra o que vai ser emitido (igual ao padrão da tela Fiscal) antes de transmitir de verdade.
+  function confirmarEmissaoNfce({ tomador, itensNfce, total, pagamento, cpfPadrao }) {
+    return new Promise(resolve => {
+      let feito = false;
+      const aviso = fiscalCfg.ambiente === 'teste'
+        ? 'A nota será gerada no <strong>modo teste</strong> e <strong>não terá valor fiscal</strong>.'
+        : fiscalCfg.ambiente === 'producao'
+          ? 'A NFC-e será enviada à SEFAZ <strong>com valor fiscal</strong>. Confira antes de emitir:'
+          : 'A NFC-e será enviada em <strong>homologação</strong> (sem valor fiscal).';
+      const { el, close } = modal({
+        title: 'Emitir NFC-e', size: 'md',
+        body: `<p class="fs-7">${aviso}</p>
+          <div class="bg-light rounded-3 p-2 px-3 mb-3 fs-7">
+            <div class="fw-semibold mb-1">${esc(tomador || 'Consumidor final')}</div>
+            ${itensNfce.map(i => `<div class="d-flex justify-content-between"><span>${num(i.qtd, i.qtd % 1 ? 2 : 0)}× ${esc(i.nome)}</span><span>${money(i.preco * i.qtd)}</span></div>`).join('')}
+            <div class="d-flex justify-content-between fw-semibold border-top mt-2 pt-2"><span>Total</span><span>${money(total)}</span></div>
+            <div class="fs-8 text-muted mt-1">Pagamento: ${esc(pagamento)}</div>
+          </div>
+          <label class="form-label">CPF ou CNPJ do cliente <span class="text-muted fw-normal">(opcional)</span></label>
+          <input class="form-control" id="cpfNota" value="${esc(cpfPadrao)}" inputmode="numeric" placeholder="000.000.000-00" autocomplete="off">`,
+        footer: '<button class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-success" id="okCpf"><i class="bi bi-send me-1"></i>Emitir agora</button>'
+      });
+      $('#okCpf', el).onclick = () => {
+        const d = $('#cpfNota', el).value.replace(/\D/g, '');
+        if (d && ![11, 14].includes(d.length)) return toast('CPF (11 dígitos) ou CNPJ (14 dígitos) inválido.', 'warning');
+        feito = true; resolve(d); close();
+      };
+      el.addEventListener('hidden.bs.modal', () => { if (!feito) resolve(null); });
+    });
+  }
+
+  // Produto sem NCM: pede o NCM ali mesmo (com sugestão pela categoria), grava no cadastro e segue a emissão
+  function completarNcm(itensSemNcm) {
+    return new Promise(resolve => {
+      let salvo = false;
+      const linhas = itensSemNcm.map(i => {
+        const p = PRODUTOS[i.id] || {};
+        const sug = NCM_SUGERIDO[p.categoria] || '';
+        return `<div class="mb-3">
+          <label class="form-label">${esc(i.nome)} <span class="text-muted fw-normal">· ${esc(p.categoria || 'sem categoria')}</span></label>
+          <input class="form-control" data-ncm="${i.id}" value="${sug}" inputmode="numeric" maxlength="10" placeholder="Ex.: 2309.10.00">
+          <div class="fs-8 text-muted mt-1">${sug ? 'Sugerido pela categoria: ' + esc(descricaoNcm(sug)) : 'Sem sugestão para esta categoria: use o NCM da nota do fornecedor.'}</div>
+        </div>`;
+      }).join('');
+      const { el, close } = modal({
+        title: 'Complete o NCM para emitir', size: 'md',
+        body: `<p class="fs-7 text-muted">A NFC-e exige o NCM (classificação fiscal) de cada produto. Digite o código ou o nome do produto para buscar. Fica salvo no cadastro para as próximas vendas.</p>${linhas}
+          <div class="alert alert-info fs-8 mb-0">Sugestões comuns para petshop. Confirme com o seu contador.</div>`,
+        footer: '<button class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary" id="okNcm"><i class="bi bi-check2 me-1"></i>Salvar e continuar</button>'
+      });
+      el.querySelectorAll('[data-ncm]').forEach(inp => ligarBuscaNcm(inp));
+      $('#okNcm', el).onclick = async () => {
+        const campos = [...el.querySelectorAll('[data-ncm]')];
+        campos.forEach(c => c.classList.remove('is-invalid'));
+        const invalido = campos.find(c => soDigitos(c.value).length !== 8);
+        if (invalido) { invalido.classList.add('is-invalid'); invalido.focus(); return toast('Cada NCM precisa ter 8 dígitos (ex.: 2309.10.00).', 'warning'); }
+        const btn = $('#okNcm', el); btn.disabled = true;
+        try {
+          for (const c of campos) {
+            const ncm = soDigitos(c.value);
+            await update('produtos', c.dataset.ncm, { ncm });
+            if (PRODUTOS[c.dataset.ncm]) PRODUTOS[c.dataset.ncm].ncm = ncm;
+          }
+          salvo = true;
+          toast('NCM salvo no cadastro dos produtos');
+          close();
+        } catch (e) { toast(e.message, 'danger'); btn.disabled = false; }
+      };
+      el.addEventListener('hidden.bs.modal', () => resolve(salvo)); // só continua depois de fechar (sem modais sobrepostos)
+    });
+  }
+
+  async function acompanharNfce(id) {
+    for (let i = 0; i < 12; i++) {
+      await new Promise(r => setTimeout(r, i < 4 ? 3000 : 6000));
+      try {
+        const r = await chamarFuncao('consultarNotaFiscal', { documentoId: id });
+        if (!EM_ANDAMENTO.includes(r.status)) return r;
+      } catch { /* tenta de novo no próximo ciclo */ }
+    }
+    return null;
+  }
+
+  async function emitirNfce(v) {
+    if (!v || !exigirLicenca()) return;
+    const produtos = (v.itens || []).filter(i => i.tipo !== 'servico');
+    if (!produtos.length) return toast('Esta venda só tem serviços: emita a NFS-e na tela Fiscal.', 'info');
+    const faltaNcm = [...new Map(produtos.filter(i => soDigitos(PRODUTOS[i.id]?.ncm).length !== 8).map(i => [i.id, i])).values()];
+    if (faltaNcm.length) { if (await completarNcm(faltaNcm)) emitirNfce(v); return; } // completa o NCM ali mesmo e segue a emissão
+
+    // serviços ficam fora da NFC-e; o desconto da venda é rateado proporcionalmente aos produtos
+    const bruto = v.itens.reduce((s, i) => s + i.preco * i.qtd, 0);
+    const brutoProd = produtos.reduce((s, i) => s + i.preco * i.qtd, 0);
+    const desconto = bruto ? Math.round((v.desconto || 0) * brutoProd / bruto * 100) / 100 : 0;
+    const total = Math.round((brutoProd - desconto) * 100) / 100;
+
+    const cpf = await confirmarEmissaoNfce({ tomador: C[v.clienteId]?.nome, itensNfce: produtos, total, pagamento: v.pagamento, cpfPadrao: C[v.clienteId]?.cpf || '' });
+    if (cpf === null) return;
+
+    const nota = {
+      tipo: 'nfce', integracao: true, status: 'rascunho', vendaId: v.id, dataEmissao: today(),
+      clienteId: v.clienteId || null, tomadorNome: C[v.clienteId]?.nome || '', tomadorCpf: cpf,
+      descricao: `Venda PDV #${v.id.slice(0, 6).toUpperCase()}`, pagamento: v.pagamento, desconto, valor: total,
+      itens: produtos.map(i => {
+        const p = PRODUTOS[i.id] || {};
+        return { produtoId: i.id, nome: i.nome, codigo: p.codigo || '', qtd: i.qtd, preco: i.preco, unidade: p.unidade || 'un',
+          ncm: p.ncm || '', cfop: p.cfop || '', cest: p.cest || '', origem: p.origem ?? '0', icmsSituacao: p.icmsSituacao || '' };
+      })
+    };
+    toast('Enviando NFC-e…', 'info');
+    try {
+      let id = null;
+      if (v.nfceId) { // reaproveita a nota rejeitada/rascunho desta venda (com os dados fiscais atualizados)
+        const atual = await get('fiscal', v.nfceId);
+        if (atual && ['rascunho', 'rejeitada'].includes(atual.status)) { id = v.nfceId; await update('fiscal', id, { ...nota, status: atual.status }); }
+        else if (atual && atual.status !== 'cancelada') return toast('Esta venda já possui NFC-e.', 'info');
+      }
+      if (!id) id = await create('fiscal', nota);
+      await chamarFuncao('emitirNotaFiscal', { documentoId: id });
+      await carregarVendas();
+      const r = await acompanharNfce(id);
+      await carregarVendas();
+      if (!r) return toast('A SEFAZ ainda está processando. A situação aparece na lista de vendas em instantes.', 'info');
+      if (r.status === 'emitida') toast('NFC-e autorizada ✔ Clique no número da nota para abrir o DANFE.');
+      else toast(`NFC-e ${r.status}: ${r.mensagem || ''}`, 'warning');
+    } catch (e) {
+      toast(mensagemErroFuncao(e), 'danger');
+      carregarVendas();
+    }
+  }
+
+  async function abrirDanfe(id) {
+    const janela = window.open('', '_blank'); // abre já no clique para o navegador não bloquear
+    try {
+      const { url } = await chamarFuncao('linkArquivoNotaFiscal', { documentoId: id, formato: 'pdf' });
+      if (janela) janela.location.href = url; else location.href = url;
+    } catch (e) { janela?.close(); toast(mensagemErroFuncao(e), 'warning'); }
   }
 
   // ---------- eventos ----------
@@ -200,7 +367,12 @@ export async function render(view) {
     $('#pet', view).innerHTML = `<option value="">Pet (opcional)</option>${ps.map(p => `<option value="${p.id}">${emoji(p.especie)} ${esc(p.nome)}</option>`).join('')}`;
   };
   $('#finalizar', view).onclick = finalizar;
-  $('#vendas', view).onclick = (e) => { const b = e.target.closest('[data-cupom]'); if (b) cupom(vendasHoje.find(v => v.id === b.dataset.cupom)); };
+  $('#vendas', view).onclick = (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.cupom) return cupom(vendasHoje.find(v => v.id === b.dataset.cupom));
+    if (b.dataset.nfce) return emitirNfce(vendasHoje.find(v => v.id === b.dataset.nfce));
+    if (b.dataset.nfcePdf) return abrirDanfe(b.dataset.nfcePdf);
+  };
   const atalho = (e) => { if (!document.body.contains(view) || !$('#finalizar', view)) return document.removeEventListener('keydown', atalho); if (e.key === 'F2') { e.preventDefault(); finalizar(); } };
   document.addEventListener('keydown', atalho);
 

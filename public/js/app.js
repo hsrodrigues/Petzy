@@ -1,6 +1,6 @@
 // ================= Shell do app: sessão, menu, rotas e licença =================
-import { auth, db, doc, getDoc, onAuthStateChanged, signOut } from './firebase.js';
-import { state, loadSession, pode, PAPEIS, licenca, carregarPlanos } from './store.js';
+import { auth, db, doc, getDoc, onAuthStateChanged, signOut, online, aoMudarConexao } from './firebase.js';
+import { state, loadSession, pode, PAPEIS, licenca, carregarPlanos, podePlano, MODULOS_PREMIUM, nomePlanoExigido } from './store.js';
 import { $, $$, esc, initials, loading, toast, fmtDate } from './ui.js';
 
 const ROTAS = {
@@ -10,12 +10,17 @@ const ROTAS = {
   pets:          { t: 'Pets',             i: 'heart',             s: 'Atendimento' },
   prontuarios:   { t: 'Prontuários',      i: 'clipboard2-pulse',  s: 'Clínico' },
   vacinas:       { t: 'Vacinas',          i: 'shield-plus',       s: 'Clínico' },
+  internacao:    { t: 'Internação',       i: 'hospital',          s: 'Clínico' },
   pdv:           { t: 'PDV / Vendas',     i: 'cart3',             s: 'Comercial' },
   produtos:      { t: 'Produtos & Serviços', i: 'box-seam',       s: 'Comercial' },
   fornecedores:  { t: 'Fornecedores',     i: 'truck',             s: 'Comercial' },
   fiscal:        { t: 'Fiscal',            i: 'receipt-cutoff',     s: 'Gestão' },
   financeiro:    { t: 'Financeiro',       i: 'cash-coin',         s: 'Gestão' },
   relatorios:    { t: 'Relatórios',       i: 'bar-chart-line',    s: 'Gestão' },
+  marketing:     { t: 'Marketing',        i: 'megaphone',         s: 'Gestão' },
+  bi:            { t: 'BI Avançado',      i: 'graph-up',          s: 'Gestão' },
+  rede:          { t: 'Rede',             i: 'diagram-3',         s: 'Gestão', oculto: true },
+  auditoria:     { t: 'Auditoria',        i: 'shield-check',      s: 'Gestão' },
   configuracoes: { t: 'Configurações',    i: 'gear',              s: 'Gestão' },
   assinatura:    { t: 'Assinatura',       i: 'credit-card',       s: 'Gestão', oculto: true }
 };
@@ -24,9 +29,15 @@ const ROTAS = {
 function montarMenu() {
   let html = '', secao = '';
   for (const [k, r] of Object.entries(ROTAS)) {
-    if (r.oculto || !pode(k)) continue;
+    // "rede" é oculta por padrão (a maioria das clínicas é unidade única) e só aparece, para o
+    // admin, quando o superadmin já agrupou a clínica numa rede
+    const mostrarOculta = k === 'rede' && state.clinica?.redeId;
+    if ((r.oculto && !mostrarOculta) || !pode(k)) continue;
     if (r.s !== secao) { secao = r.s; html += `<div class="nav-section">${secao}</div>`; }
-    html += `<a class="nav-link" href="#/${k}" data-rota="${k}" title="${esc(r.t)}" aria-label="${esc(r.t)}"><i class="bi bi-${r.i}"></i>${r.t}</a>`;
+    // itens de plano pago mais caro ficam visíveis pra todo mundo (isso vende o upgrade), só que com
+    // um selo — quem não tem o plano vê uma chamada pra assinar em vez da tela real (ver router())
+    const selo = MODULOS_PREMIUM[k] && !podePlano(k) ? ` <span class="badge-soft-warning badge nav-selo">${nomePlanoExigido(k)}</span>` : '';
+    html += `<a class="nav-link" href="#/${k}" data-rota="${k}" title="${esc(r.t)}" aria-label="${esc(r.t)}"><i class="bi bi-${r.i}"></i>${r.t}${selo}</a>`;
   }
   $('#nav').innerHTML = html;
 }
@@ -77,6 +88,17 @@ async function router() {
   if (!ROTAS[rota]) { location.hash = '#/dashboard'; return; }
   if (!pode(rota) && !(rota === 'assinatura' && state.perfil.papel === 'admin')) {
     view.innerHTML = `<div class="empty-state"><i class="bi bi-shield-lock"></i><h5>Acesso restrito</h5><p>Seu perfil (${PAPEIS[state.perfil.papel]}) não tem acesso a esta área.</p></div>`;
+    return;
+  }
+  if (!podePlano(rota)) {
+    marcarMenu(rota);
+    const plano = nomePlanoExigido(rota);
+    view.innerHTML = `<div class="empty-state">
+      <i class="bi bi-stars text-warning"></i>
+      <h5>${esc(ROTAS[rota].t)} é um recurso ${esc(plano)}</h5>
+      <p class="text-muted">Faça upgrade para o plano ${esc(plano)} para desbloquear ${esc(ROTAS[rota].t.toLowerCase())} e outros recursos avançados.</p>
+      ${state.perfil.papel === 'admin' ? `<a href="#/assinatura" class="btn btn-primary"><i class="bi bi-stars me-1"></i>Ver planos</a>` : `<p class="fs-8 text-muted">Peça ao administrador da clínica para assinar o plano ${esc(plano)}.</p>`}
+    </div>`;
     return;
   }
 
@@ -133,7 +155,9 @@ $('#btnLogout').onclick = async () => { await signOut(auth); location.replace('l
 export async function recarregarClinica() {
   const c = await getDoc(doc(db, 'clinicas', state.clinicaId));
   state.clinica = { id: c.id, ...c.data() };
-  $('#clinicName').textContent = state.clinica.nome;
+  // esta função é async: se o usuário deslogar ou a tela mudar antes do await acima terminar (ex.:
+  // apagar tudo -> navega pro dashboard), o shell pode já não estar mais no DOM — não deixa quebrar.
+  const nome = $('#clinicName'); if (nome) nome.textContent = state.clinica.nome;
   renderLicenca();
 }
 
@@ -172,6 +196,13 @@ onAuthStateChanged(auth, async (user) => {
     $('#shell').classList.remove('d-none');
     window.addEventListener('hashchange', router);
     router();
+
+    // indicador de conexão: dados carregados continuam disponíveis, e gravações feitas offline
+    // (ex.: uma venda no PDV) entram na fila do Firestore e sincronizam sozinhas ao reconectar
+    const badgeOffline = $('#badgeOffline');
+    const atualizarBadgeOffline = (on) => badgeOffline.classList.toggle('d-none', on);
+    atualizarBadgeOffline(online.valor);
+    aoMudarConexao(atualizarBadgeOffline);
   } catch (e) {
     console.error(e);
     $('#boot').innerHTML = `<div class="text-center p-4"><h5>Não foi possível carregar sua conta</h5><p class="text-muted">${esc(e.message)}</p>

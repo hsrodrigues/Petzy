@@ -107,16 +107,16 @@ export function blocoPaciente(p = {}, t = {}) {
   </div></div>`;
 }
 
-const assinVet = (v = {}) => `<div>${esc(v.nome || '')}<small>Médico(a) Veterinário(a)${v.crmv ? ' · CRMV ' + esc(v.crmv) : ''}</small></div>`;
+const assinVet = (v = {}, rotulo = 'Médico(a) Veterinário(a)') => `<div>${esc(v.nome || '')}<small>${rotulo}${v.crmv ? ' · CRMV ' + esc(v.crmv) : ''}</small></div>`;
 
-function pagina({ c, titulo, sub, corpo, vet, tutor, assinaTutor, data, semAssinatura }) {
+function pagina({ c, titulo, sub, corpo, vet, tutor, assinaTutor, data, semAssinatura, rotuloAssinatura }) {
   return `<section class="pagina">
     ${cabecalho(c)}
     <div class="titulo"><h2>${titulo}</h2>${sub ? `<div class="sub">${sub}</div>` : ''}</div>
     ${corpo}
     <div class="espaco"></div>
     ${semAssinatura ? '' : `<div class="local">${esc(c.cidade ? c.cidade + ', ' : '')}${dataExtenso(data)}.</div>
-    <div class="assin">${assinaTutor ? `<div>${esc(tutor?.nome || '')}<small>Tutor(a) responsável${tutor?.cpf ? ' · CPF ' + esc(tutor.cpf) : ''}</small></div>` : ''}${assinVet(vet)}</div>`}
+    <div class="assin">${assinaTutor ? `<div>${esc(tutor?.nome || '')}<small>Tutor(a) responsável${tutor?.cpf ? ' · CPF ' + esc(tutor.cpf) : ''}</small></div>` : ''}${assinVet(vet, rotuloAssinatura)}</div>`}
     <footer class="doc"><span>${esc(c.rodape || [c.nome, c.telefone].filter(Boolean).join(' · '))}</span><span>Emitido pelo Petzy em ${new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span></footer>
   </section>`;
 }
@@ -187,6 +187,7 @@ export function prontuario({ clinica: c, pet, tutor, vet, atendimento: a }) {
     ${(a.examesSolicitados?.length || a.exames) ? `<h3>Exames solicitados</h3><p>${esc([...(a.examesSolicitados || []), a.exames].filter(Boolean).join(' · '))}</p>` : ''}
     ${(a.receita?.length || a.prescricao) ? `<h3>Prescrição</h3>${listaMedicamentos(a.receita) || `<p>${txt(a.prescricao)}</p>`}` : ''}
     ${sec('Orientações ao tutor', a.orientacoes || a.receitaObs)}
+    ${a.anexos?.length ? `<p class="fs-8" style="color:#8a8ea3"><strong>Anexos no sistema:</strong> ${esc(a.anexos.map(x => x.nome).join(', '))}</p>` : ''}
     ${a.retorno ? `<div class="aviso"><strong>Retorno:</strong> ${fmtDate(a.retorno)}</div>` : ''}`;
   return documento([pagina({ c, titulo: 'Prontuário clínico', sub: `Registro de atendimento · ${fmtDate(a.data?.slice(0, 10))}`, corpo, vet, data: a.data })], `Prontuário - ${pet?.nome || ''}`, c);
 }
@@ -203,6 +204,18 @@ export function solicitacaoExames({ clinica: c, pet, tutor, vet, exames = [], ou
     ${outros ? `<h3>Outros exames / observações ao laboratório</h3><p>${txt(outros)}</p>` : ''}
     ${suspeita ? `<h3>Suspeita clínica / informações relevantes</h3><p>${txt(suspeita)}</p>` : ''}`;
   return documento([pagina({ c, titulo: 'Solicitação de exames', corpo, vet, data })], `Exames - ${pet?.nome || ''}`, c);
+}
+
+export const TIPOS_LAUDO = ['Raio-X', 'Ultrassonografia', 'Ecocardiograma', 'Eletrocardiograma', 'Histopatológico', 'Citologia',
+  'Necropsia', 'Endoscopia', 'Tomografia computadorizada', 'Ressonância magnética', 'Laboratorial', 'Outro'];
+
+export function laudo({ clinica: c, pet, tutor, vet, tipoExame = '', achados = '', conclusao = '', recomendacoes = '', data }) {
+  const corpo = blocoPaciente(pet, tutor) + `
+    ${tipoExame ? `<h3>Tipo de exame</h3><p>${esc(tipoExame)}</p>` : ''}
+    <h3>Achados</h3><p style="text-align:justify">${txt(achados)}</p>
+    ${conclusao ? `<h3>Conclusão / impressão diagnóstica</h3><p style="text-align:justify"><strong>${txt(conclusao)}</strong></p>` : ''}
+    ${recomendacoes ? `<h3>Recomendações</h3><p style="text-align:justify">${txt(recomendacoes)}</p>` : ''}`;
+  return documento([pagina({ c, titulo: `Laudo${tipoExame ? ' · ' + tipoExame : ''}`, corpo, vet, data, rotuloAssinatura: 'Médico(a) Veterinário(a) responsável' })], `Laudo - ${pet?.nome || ''}`, c);
 }
 
 export function atestadoSaude({ clinica: c, pet, tutor, vet, finalidade = 'viajar', destino = '', vacinas = [], obs = '', validade = '', data }) {
@@ -242,4 +255,50 @@ export function carteiraVacinas({ clinica: c, pet, tutor, vacinas = [] }) {
     ${vs.map(v => `<tr><td><strong>${esc(v.nome)}</strong></td><td>${esc(v.dose || '')}</td><td>${fmtDate(v.dataAplicacao)}</td><td>${esc([v.lote, v.fabricante].filter(Boolean).join(' · '))}</td><td>${fmtDate(v.proximaDose)}</td><td>${esc(v.veterinario || '')}</td></tr>`).join('')}
     </tbody></table>` : '<p style="color:#999">Nenhuma vacina registrada.</p>');
   return documento([pagina({ c, titulo: 'Carteira de vacinação', corpo, semAssinatura: true })], `Carteira de vacinação - ${pet?.nome || ''}`, c);
+}
+
+// ---------- valor por extenso (reais e centavos) ----------
+const UNID = ['', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove', 'dez', 'onze', 'doze', 'treze', 'quatorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove'];
+const DEZ = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa'];
+const CEM = ['', 'cento', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
+
+function ate999(n) {
+  if (n === 100) return 'cem';
+  const c = Math.floor(n / 100), r = n % 100, p = [];
+  if (c) p.push(CEM[c]);
+  if (r) p.push(r < 20 ? UNID[r] : DEZ[Math.floor(r / 10)] + (r % 10 ? ' e ' + UNID[r % 10] : ''));
+  return p.join(' e ');
+}
+
+export function valorPorExtenso(valor) {
+  const total = Math.round(Math.abs(Number(valor) || 0) * 100);
+  const reais = Math.floor(total / 100), centavos = total % 100;
+  const mi = Math.floor(reais / 1e6), mil = Math.floor((reais % 1e6) / 1000), un = reais % 1000;
+  const grupos = [];
+  if (mi) grupos.push(mi === 1 ? 'um milhão' : ate999(mi) + ' milhões');
+  if (mil) grupos.push(mil === 1 ? 'mil' : ate999(mil) + ' mil');
+  if (un) grupos.push(ate999(un));
+  // "mil e quinhentos", "mil e um"; mas "mil duzentos e trinta"
+  let texto = grupos.reduce((acc, g, i) => !acc ? g : acc + (i === grupos.length - 1 && un && (un < 100 || un % 100 === 0) ? ' e ' : ' ') + g, '');
+  if (reais) texto += (mi && !mil && !un ? ' de' : '') + (reais === 1 ? ' real' : ' reais');
+  if (centavos) texto += (reais ? ' e ' : '') + ate999(centavos) + (centavos === 1 ? ' centavo' : ' centavos');
+  return texto || 'zero real';
+}
+
+// ---------- Recibo de prestação de serviços (sem valor fiscal) ----------
+export function recibo({ clinica: c, tomador = {}, nota = {}, emissor = {}, data }) {
+  const valor = Number(nota.valor) || 0;
+  const valorFmt = valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const corpo = `
+    <div class="caixa"><div class="grid">
+      <div class="span2"><span class="rot">Recebemos de</span><span class="val">${esc(tomador.nome || 'Consumidor final')}</span></div>
+      <div><span class="rot">CPF / CNPJ</span>${esc(tomador.cpf || '—')}</div>
+      <div><span class="rot">Valor</span><span class="val" style="font-size:15px">${valorFmt}</span></div>
+    </div></div>
+    <p style="font-size:13.5px;line-height:1.9;text-align:justify;margin:14px 0">
+      Recebemos de <strong>${esc(tomador.nome || 'consumidor final')}</strong> a importância de <strong>${valorFmt}</strong>
+      (${esc(valorPorExtenso(valor))}), referente a: <strong>${esc(nota.descricao || 'serviços prestados')}</strong>.</p>
+    ${nota.numero && nota.status === 'emitida' ? `<p><strong>Nota fiscal vinculada:</strong> nº ${esc(nota.numero)}${nota.serie ? ' · série ' + esc(nota.serie) : ''}${nota.codigoVerificacao ? ' · código de verificação ' + esc(nota.codigoVerificacao) : ''}</p>` : ''}
+    <div class="aviso" style="margin-top:14px"><strong>Documento sem valor fiscal.</strong> Este recibo comprova o pagamento, mas não substitui a nota fiscal.</div>`;
+  return documento([pagina({ c, titulo: 'Recibo', sub: 'Prestação de serviços', corpo, vet: emissor, data, rotuloAssinatura: 'Emitente' })], `Recibo - ${tomador.nome || ''}`, c);
 }

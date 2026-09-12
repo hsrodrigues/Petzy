@@ -1,5 +1,5 @@
 import { list, save, remove, get, update, loadTutoresPets, where } from '../store.js';
-import { $, esc, pageHeader, empty, formModal, confirmar, toast, idade, fmtDate, fmtDateTime, norm, debounce, badge, money, comprimirImagem } from '../ui.js';
+import { $, esc, pageHeader, empty, formModal, confirmar, toast, idade, fmtDate, fmtDateTime, norm, debounce, badge, money, comprimirImagem, today } from '../ui.js';
 import { exigirLicenca } from '../app.js';
 import { abrirFormCliente } from './clientes.js';
 import { gerarDocumento, menuDocs } from '../documentos.js';
@@ -111,7 +111,8 @@ export async function render(view, { args, params }) {
       </div>`).join('') : `<div class="col-12"><div class="card">${empty('heart', dados.pets.length ? 'Nenhum pet encontrado.' : 'Nenhum pet cadastrado ainda.')}</div></div>`;
   }
 
-  const recarregar = async () => { dados = await loadTutoresPets(); desenhar(); };
+  const telaAtiva = view.firstElementChild; // some quando o usuário navega para outra tela
+  const recarregar = async () => { dados = await loadTutoresPets(); if (telaAtiva.isConnected) desenhar(); };
   busca.addEventListener('input', debounce(desenhar, 150));
   $('#fEspecie', view).onchange = desenhar;
   $('#limparFiltros', view).onclick = () => { busca.value = ''; $('#fEspecie', view).value = ''; desenhar(); };
@@ -122,7 +123,12 @@ export async function render(view, { args, params }) {
   $('#btnTutor', view).onclick = () => abrirFormCliente({}, (c) => { recarregar().then(() => abrirFormPet({ clienteId: c.id }, dados, recarregar)); });
 
   desenhar();
-  if (params.get('novo')) abrirFormPet({ clienteId: params.get('novo') }, dados, recarregar);
+  const novoParam = params.get('novo');
+  // "?novo=1" (atalho genérico, sem tutor pré-selecionado) vs "?novo=<id do tutor>" (vindo da lista de tutores)
+  if (novoParam) {
+    if (!dados.clientes.length) toast('Cadastre um tutor primeiro.', 'warning');
+    else abrirFormPet({ clienteId: novoParam === '1' ? undefined : novoParam }, dados, recarregar);
+  }
 }
 
 // ================= Perfil do pet =================
@@ -192,7 +198,7 @@ async function renderPerfil(view, id) {
       <div class="tab-pane fade" id="tVac"><div class="card"><div class="table-responsive"><table class="table">
         <thead><tr><th>Vacina</th><th>Aplicação</th><th>Próxima dose</th><th>Lote</th></tr></thead>
         <tbody>${vac.length ? vac.map(v => `<tr><td class="fw-semibold">${esc(v.nome)}</td><td>${fmtDate(v.dataAplicacao)}</td>
-          <td>${v.proximaDose ? badge(fmtDate(v.proximaDose), v.proximaDose < new Date().toISOString().slice(0, 10) ? 'danger' : 'success') : '—'}</td><td class="fs-7 text-muted">${esc(v.lote || '')}</td></tr>`).join('')
+          <td>${v.proximaDose ? badge(fmtDate(v.proximaDose), v.proximaDose < today() ? 'danger' : 'success') : '—'}</td><td class="fs-7 text-muted">${esc(v.lote || '')}</td></tr>`).join('')
           : `<tr><td colspan="4">${empty('shield', 'Nenhuma vacina registrada.')}</td></tr>`}</tbody></table></div></div></div>
       <div class="tab-pane fade" id="tAg"><div class="card"><div class="table-responsive"><table class="table">
         <thead><tr><th>Data</th><th>Tipo</th><th>Status</th><th class="text-end">Valor</th></tr></thead>

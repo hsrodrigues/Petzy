@@ -1,15 +1,17 @@
 import { state, list, ref, where, PAPEIS, PLANOS, MODULOS, db, writeBatch, col } from '../store.js';
 import {
   doc, setDoc, updateDoc, initializeApp, deleteApp, getAuth, createUserWithEmailAndPassword, signOut, firebaseConfig,
-  storage, ref as sRef, uploadBytes, getDownloadURL, deleteObject, emulador, connectAuthEmulator, app, getFunctions, httpsCallable
+  storage, ref as sRef, uploadBytes, getDownloadURL, deleteObject, emulador, connectAuthEmulator, chamarFuncao
 } from '../firebase.js';
-import { $, esc, pageHeader, formModal, toast, confirmar, modal, initials, badge, mask, toISODate, toISODateTime, addDays, comprimirImagem } from '../ui.js';
+import { $, esc, pageHeader, formModal, toast, confirmar, modal, initials, badge, mask, toISODate, toISODateTime, addDays, comprimirImagem, num } from '../ui.js';
 import { recarregarClinica, exigirLicenca } from '../app.js';
 import { previsualizar } from '../documentos.js';
+import { NCM_SUGERIDO } from '../fiscalDados.js';
+import { atualizarTabela as atualizarTabelaNcm, garantirCache as garantirCacheNcm } from '../ncm.js';
 import * as D from '../docs.js';
 
 // coleções operacionais (ordem: dependentes primeiro)
-const COLECOES = ['agendamentos', 'atendimentos', 'vacinas', 'vendas', 'financeiro', 'movimentacoes', 'modelosReceita', 'pets', 'clientes', 'produtos', 'fornecedores', 'fiscal'];
+const COLECOES = ['agendamentos', 'atendimentos', 'vacinas', 'vendas', 'financeiro', 'movimentacoes', 'modelosReceita', 'pets', 'clientes', 'produtos', 'fornecedores', 'fiscal', 'solicitacoesPortal', 'internacoes', 'campanhas'];
 const UFS = 'AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' ');
 
 const IMPORTACOES = {
@@ -129,9 +131,29 @@ export async function render(view) {
       ${admin ? `<div class="tab-pane fade" id="tDados">
         <div class="card mb-3"><div class="card-body">
           <h5 class="fw-bold mb-1"><i class="bi bi-receipt-cutoff text-primary me-1"></i>Integração fiscal</h5>
-          <p class="text-muted mb-3">Deixe os dados fiscais prontos para conectar um provedor de NF-e, NFC-e ou NFS-e. Tokens, certificados A1 e senhas devem ficar no Secret Manager, nunca no navegador.</p>
+          <p class="text-muted mb-3">Emita NFS-e pelo Petzy com a TecnoSpeed. Comece no <strong>modo teste</strong> (sem valor fiscal) e passe para produção quando a clínica estiver cadastrada com o certificado digital. O token de acesso é da plataforma e fica protegido no servidor.</p>
           <div class="d-flex gap-2 flex-wrap"><button class="btn btn-outline-primary" id="btnFiscalConfig"><i class="bi bi-sliders me-1"></i>Configurar dados fiscais</button>
-          <button class="btn btn-primary" id="btnFiscalToken"><i class="bi bi-key me-1"></i>Configurar token TecnoSpeed</button></div>
+          <button class="btn btn-light border" id="btnFiscalVerificar"><i class="bi bi-plug me-1"></i>Verificar conexão</button></div>
+        </div></div>
+        <div class="card mb-3"><div class="card-body">
+          <h5 class="fw-bold mb-1"><i class="bi bi-phone text-primary me-1"></i>Portal do tutor</h5>
+          <p class="text-muted mb-3">Envie este link para os tutores: eles entram com telefone e CPF e veem o histórico, as vacinas e os próximos agendamentos do pet, além de poderem pedir um horário sem ligar. Os pedidos aparecem na sua Agenda.</p>
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <input class="form-control" id="portalLink" readonly style="max-width:420px">
+            <button class="btn btn-outline-primary" id="btnPortalCopiar"><i class="bi bi-clipboard me-1"></i>Copiar link</button>
+            <button class="btn btn-light border" id="btnPortalQr"><i class="bi bi-qr-code me-1"></i>QR Code</button>
+            <a class="btn btn-light border" id="btnPortalWhats" target="_blank" rel="noopener"><i class="bi bi-whatsapp text-success me-1"></i>Divulgar no WhatsApp</a>
+          </div>
+        </div></div>
+        <div class="card mb-3"><div class="card-body">
+          <h5 class="fw-bold mb-1"><i class="bi bi-calendar-plus text-primary me-1"></i>Agendamento online público</h5>
+          <p class="text-muted mb-3">Link para <strong>qualquer pessoa</strong> pedir um horário, mesmo sem ser cliente ainda — ótimo para o Instagram ou o Google. O pedido cai na Agenda para a equipe confirmar o cadastro e o horário.</p>
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <input class="form-control" id="agendarLink" readonly style="max-width:420px">
+            <button class="btn btn-outline-primary" id="btnAgendarCopiar"><i class="bi bi-clipboard me-1"></i>Copiar link</button>
+            <button class="btn btn-light border" id="btnAgendarQr"><i class="bi bi-qr-code me-1"></i>QR Code</button>
+            <a class="btn btn-light border" id="btnAgendarWhats" target="_blank" rel="noopener"><i class="bi bi-whatsapp text-success me-1"></i>Divulgar no WhatsApp</a>
+          </div>
         </div></div>
         <div class="card mb-3"><div class="card-body">
           <h5 class="fw-bold mb-1"><i class="bi bi-shield-check text-success me-1"></i>Privacidade e LGPD</h5>
@@ -144,8 +166,16 @@ export async function render(view) {
           <button class="btn btn-primary" id="btnImportar"><i class="bi bi-upload me-1"></i>Importar CSV</button>
         </div></div>
         <div class="card mb-3"><div class="card-body">
+          <h5 class="fw-bold mb-1"><i class="bi bi-upc-scan text-primary me-1"></i>Tabela de NCM</h5>
+          <p class="text-muted mb-3">Classificação fiscal usada na NF-e e na NFC-e, direto da fonte oficial (Siscomex/Receita Federal). Fica salva no navegador: a busca funciona offline depois de baixada uma vez.</p>
+          <div class="d-flex align-items-center gap-3 flex-wrap">
+            <button class="btn btn-primary" id="btnNcmAtualizar"><i class="bi bi-cloud-download me-1"></i>Atualizar tabela de NCM</button>
+            <span class="fs-7 text-muted" id="ncmStatus">Verificando...</span>
+          </div>
+        </div></div>
+        <div class="card mb-3"><div class="card-body">
           <h5 class="fw-bold mb-1"><i class="bi bi-magic text-primary me-1"></i>Dados de exemplo</h5>
-          <p class="text-muted mb-3">Tutores, pets, produtos, serviços, agenda da semana, prontuários, vacinas, vendas e financeiro dos últimos meses.
+          <p class="text-muted mb-3">Tutores com CPF e endereço, pets, fornecedores, produtos com dados fiscais (NCM), serviços, compras e contas a pagar, agenda, prontuários, vacinas, vendas, fiado, financeiro e notas fiscais de exemplo.
           Tudo o que é gerado aqui fica <strong>marcado como exemplo</strong> e pode ser removido depois sem afetar seus dados reais.</p>
           <div class="d-flex gap-2 flex-wrap">
             <button class="btn btn-gradient" id="btnDemo"><i class="bi bi-magic me-1"></i>Gerar dados de exemplo</button>
@@ -238,7 +268,9 @@ export async function render(view) {
     await updateDoc(doc(db, 'usuarios', state.user.uid), d);
     await updateDoc(doc(db, 'clinicas', state.clinicaId, 'equipe', state.user.uid), d).catch(() => {});
     Object.assign(state.perfil, d);
-    $('#userName').textContent = d.nome;
+    // async: se o usuário já tiver navegado/deslogado enquanto os updateDoc acima rodavam, o elemento
+    // do shell pode não existir mais — não deixa essa atualização cosmética quebrar o resto do fluxo.
+    const nomeEl = $('#userName'); if (nomeEl) nomeEl.textContent = d.nome;
     toast('Perfil atualizado');
   };
 
@@ -254,10 +286,13 @@ export async function render(view) {
       <td><div class="d-flex align-items-center gap-2"><span class="avatar">${initials(m.nome)}</span><span class="fw-semibold">${esc(m.nome)}</span>${m.id === state.user.uid ? badge('você', 'primary') : ''}</div></td>
       <td class="fs-7">${esc(m.email)}</td><td class="fs-7">${PAPEIS[m.papel] || esc(m.papel)}</td>
       <td>${m.ativo ? badge('ativo', 'success') : badge('inativo', 'secondary')}</td>
-      ${admin ? `<td class="text-end text-nowrap">${m.id === c.ownerUid ? '<span class="text-muted fs-8">proprietário</span>' : `
-        <button class="btn btn-sm btn-light border" data-papel="${m.id}">Função</button>
-        <button class="btn btn-sm btn-light border" data-modulos="${m.id}"><i class="bi bi-grid-3x3-gap me-1"></i>Módulos</button>
-        <button class="btn btn-sm ${m.ativo ? 'btn-outline-danger' : 'btn-outline-success'}" data-toggle="${m.id}">${m.ativo ? 'Desativar' : 'Reativar'}</button>`}</td>` : ''}
+      ${admin ? `<td class="text-end text-nowrap">
+        ${m.id === c.ownerUid ? '<span class="text-muted fs-8 me-2">proprietário</span>' : `
+          <button class="btn btn-sm btn-light border" data-papel="${m.id}">Função</button>
+          <button class="btn btn-sm btn-light border" data-modulos="${m.id}"><i class="bi bi-grid-3x3-gap me-1"></i>Módulos</button>
+          <button class="btn btn-sm ${m.ativo ? 'btn-outline-danger' : 'btn-outline-success'}" data-toggle="${m.id}">${m.ativo ? 'Desativar' : 'Reativar'}</button>`}
+        <button class="btn btn-sm btn-light border" data-comissao="${m.id}"><i class="bi bi-percent me-1"></i>${m.comissaoPercentual ? num(m.comissaoPercentual) + '%' : 'Comissão'}</button>
+      </td>` : ''}
     </tr>`).join('');
   }
 
@@ -268,54 +303,145 @@ export async function render(view) {
   }
 
   if (admin) {
-    $('#btnFiscalToken', view).onclick = () => formModal({
-      title: 'Token TecnoSpeed', size: 'md',
-      fields: [
-        { name: 'token', label: 'API key do PlugNotas/TecnoSpeed', type: 'password', required: true, col: 'col-12', attrs: 'autocomplete="new-password" minlength="10"' },
-        { type: 'custom', col: 'col-12', html: '<div class="alert alert-warning fs-8 mb-0"><i class="bi bi-shield-lock me-1"></i>O token será enviado diretamente ao backend e gravado no Secret Manager. Ele não será salvo no Firestore nem no navegador.</div>' }
-      ],
-      onSubmit: async (d, form) => {
-        const fn = httpsCallable(getFunctions(app, 'southamerica-east1'), 'configurarTokenTecnoSpeed');
-        await fn({ token: d.token });
-        form.elements.token.value = '';
-        toast('Token TecnoSpeed configurado com segurança');
-      }
-    });
+    // ---------- portal do tutor ----------
+    const portalUrl = new URL('portal.html', location.href);
+    portalUrl.searchParams.set('c', state.clinicaId);
+    $('#portalLink', view).value = portalUrl.toString();
+    $('#portalLink', view).scrollLeft = 0; // mostra o começo da URL (o nome do arquivo), não só o "?c=..." final
+    $('#btnPortalCopiar', view).onclick = async () => {
+      try { await navigator.clipboard.writeText(portalUrl.toString()); } catch { $('#portalLink', view).select(); document.execCommand('copy'); }
+      toast('Link copiado');
+    };
+    $('#btnPortalWhats', view).href = `https://wa.me/?text=${encodeURIComponent(`Olá! Agora você pode acompanhar o histórico e as vacinas do seu pet e pedir um horário pelo nosso portal:\n${portalUrl}\n\nBasta entrar com o telefone e o CPF cadastrados na clínica. 🐾`)}`;
+    $('#btnPortalQr', view).onclick = async () => {
+      const { qrDataURL } = await import('../pix.js');
+      try {
+        const img = await qrDataURL(portalUrl.toString());
+        modal({ title: 'QR Code do portal', size: 'sm', body: `<div class="text-center"><img src="${img}" style="width:220px;max-width:100%;image-rendering:pixelated" class="border rounded-3 p-2 bg-white mb-2"><div class="fs-7 text-muted">Aponte a câmera do celular para abrir o portal. Vale colocar impresso na recepção.</div></div>` });
+      } catch (e) { toast(e.message, 'danger'); }
+    };
+
+    // ---------- agendamento online público ----------
+    const agendarUrl = new URL('agendar.html', location.href);
+    agendarUrl.searchParams.set('c', state.clinicaId);
+    $('#agendarLink', view).value = agendarUrl.toString();
+    $('#agendarLink', view).scrollLeft = 0;
+    $('#btnAgendarCopiar', view).onclick = async () => {
+      try { await navigator.clipboard.writeText(agendarUrl.toString()); } catch { $('#agendarLink', view).select(); document.execCommand('copy'); }
+      toast('Link copiado');
+    };
+    $('#btnAgendarWhats', view).href = `https://wa.me/?text=${encodeURIComponent(`Quer marcar um horário na ${state.clinica.nome}? Preencha aqui, sem precisar ligar:\n${agendarUrl}`)}`;
+    $('#btnAgendarQr', view).onclick = async () => {
+      const { qrDataURL } = await import('../pix.js');
+      try {
+        const img = await qrDataURL(agendarUrl.toString());
+        modal({ title: 'QR Code de agendamento', size: 'sm', body: `<div class="text-center"><img src="${img}" style="width:220px;max-width:100%;image-rendering:pixelated" class="border rounded-3 p-2 bg-white mb-2"><div class="fs-7 text-muted">Ótimo para colocar nas redes sociais ou na vitrine — qualquer pessoa pode pedir um horário sem ligar.</div></div>` });
+      } catch (e) { toast(e.message, 'danger'); }
+    };
+
+    // Diagnóstico: a clínica está cadastrada na TecnoSpeed? Em produção ou homologação na prefeitura?
+    $('#btnFiscalVerificar', view).onclick = async (e) => {
+      const b = e.currentTarget;
+      if (!['tecnospeed', 'plugnotas'].includes(state.clinica.fiscal?.provedor)) return toast('Escolha "TecnoSpeed / PlugNotas" em Configurar dados fiscais primeiro.', 'warning');
+      b.disabled = true; const html = b.innerHTML; b.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Verificando...';
+      try {
+        const r = await chamarFuncao('verificarEmpresaFiscal', {});
+        const linha = (rot, val, cor = '') => `<div class="d-flex justify-content-between py-2 border-bottom"><span class="text-muted">${rot}</span><strong class="${cor}">${val}</strong></div>`;
+        const ambientes = { teste: 'Teste (sandbox, sem valor fiscal)', homologacao: 'Homologação', producao: 'Produção' };
+        const conflito = r.cadastrada && ((r.ambiente === 'homologacao' && r.producao) || (r.ambiente === 'producao' && !r.producao));
+        modal({
+          title: `<i class="bi bi-plug me-2 text-primary"></i>Conexão com a TecnoSpeed`, size: 'md',
+          body: `${linha('Ambiente no Petzy', ambientes[r.ambiente] || r.ambiente)}
+            ${linha('CNPJ emitente', esc(r.cnpj))}
+            ${linha('Cadastrada na TecnoSpeed', r.cadastrada ? 'Sim' : 'Não', r.cadastrada ? 'text-success' : 'text-danger')}
+            ${r.cadastrada ? linha('Razão social', esc(r.razaoSocial || '—')) + [['nfse', 'NFS-e (serviços)'], ['nfce', 'NFC-e (balcão)'], ['nfe', 'NF-e (produtos)']].map(([t, rot]) => {
+              const x = r.tipos?.[t] || {};
+              return linha(rot, x.ativo ? (x.producao ? 'Habilitada · produção' : 'Habilitada · homologação') : 'Não habilitada', x.ativo ? 'text-success' : 'text-muted');
+            }).join('') : ''}
+            <div class="alert alert-${!r.cadastrada || conflito ? 'warning' : 'success'} fs-7 mt-3 mb-0">${
+              r.teste ? 'Modo teste: as notas usam a empresa de demonstração da TecnoSpeed e não têm valor fiscal. Tudo pronto para testar.'
+              : !r.cadastrada ? 'O CNPJ ainda não está cadastrado na TecnoSpeed. É preciso cadastrar a empresa e o certificado digital A1 antes de emitir.'
+              : conflito ? 'O ambiente do Petzy não bate com o da TecnoSpeed. Ajuste um dos dois para evitar emitir no ambiente errado.'
+              : 'Conexão OK. A clínica já pode emitir NFS-e.'}</div>`
+        });
+      } catch (err) {
+        toast(err.code === 'functions/internal' && err.message === 'internal' ? 'O serviço fiscal está indisponível no momento.' : err.message, 'danger');
+      } finally { b.disabled = false; b.innerHTML = html; }
+    };
 
     $('#btnFiscalConfig', view).onclick = () => {
       const fiscal = c.fiscal || {};
+      const TRIBUTACAO = [
+        { value: 6, label: 'Tributável dentro do município' }, { value: 7, label: 'Tributável fora do município' },
+        { value: 5, label: 'ISS retido pelo tomador' }, { value: 1, label: 'Isento de ISS' }, { value: 2, label: 'Imune' }
+      ];
+      const INFO_AMBIENTE = {
+        teste: 'As notas são geradas no sandbox da TecnoSpeed com uma empresa de demonstração. Não têm valor fiscal: ideal para conhecer e testar o fluxo.',
+        homologacao: 'Notas enviadas à prefeitura em ambiente de homologação (sem valor fiscal). Exige a clínica cadastrada na TecnoSpeed com certificado.',
+        producao: '<strong class="text-danger">Notas com valor fiscal.</strong> Use somente depois de validar tributação e dados com o contador.'
+      };
       formModal({
-        title: 'Configuração fiscal', size: 'lg', values: { ambiente: 'homologacao', serieNfe: '1', serieNfce: '1', serieNfse: '1', ...fiscal },
+        title: 'Configuração fiscal', size: 'lg',
+        values: {
+          ambiente: 'teste', serieNfe: '1', serieNfce: '1', serieNfse: '1', codigoServico: '05.01', cnae: '7500100', tipoTributacao: 6, cnpj: c.cnpj || '',
+          regimeTributario: 'simples', cfopPadrao: '5102', csosnPadrao: '102', cstPisCofins: '49',
+          ...fiscal, provedor: fiscal.provedor === 'plugnotas' ? 'tecnospeed' : (fiscal.provedor || '')
+        },
         fields: [
           { type: 'section', label: 'Provedor e ambiente' },
           { name: 'provedor', label: 'Provedor fiscal', type: 'select', options: [
-            { value: '', label: 'Ainda não definido' },
-            { value: 'nuvemfiscal', label: 'Nuvem Fiscal' },
-            { value: 'focusnfe', label: 'Focus NFe' },
-            { value: 'plugnotas', label: 'PlugNotas' },
-            { value: 'tecnospeed', label: 'TecnoSpeed' },
-            { value: 'enotas', label: 'eNotas' },
-            { value: 'webmaniabr', label: 'WebmaniaBR' },
-            { value: 'oobj', label: 'Oobj' },
-            { value: 'sefaz', label: 'SEFAZ direto' },
-            { value: 'prefeitura', label: 'Prefeitura / NFS-e municipal' },
-            { value: 'outro', label: 'Outro provedor' }
+            { value: 'tecnospeed', label: 'TecnoSpeed / PlugNotas · emissão integrada' },
+            { value: 'externo', label: 'Outro provedor (registro manual das notas)' }
           ], col: 'col-md-6' },
-          { name: 'ambiente', label: 'Ambiente', type: 'select', options: [{ value: 'homologacao', label: 'Homologação / testes' }, { value: 'producao', label: 'Produção' }], col: 'col-md-6' },
-          { type: 'section', label: 'Identificação tributária' },
+          { name: 'ambiente', label: 'Ambiente', type: 'select', required: true, options: [
+            { value: 'teste', label: 'Teste · sem valor fiscal' },
+            { value: 'homologacao', label: 'Homologação na prefeitura' },
+            { value: 'producao', label: 'Produção · com valor fiscal' }
+          ], col: 'col-md-6' },
+          { type: 'custom', col: 'col-12', html: '<div class="fs-7 text-muted" id="ambInfo"></div>' },
+          { type: 'section', label: 'Emitente' },
           { name: 'cnpj', label: 'CNPJ do emitente', col: 'col-md-4' },
-          { name: 'inscricaoEstadual', label: 'Inscrição estadual', col: 'col-md-4' },
           { name: 'inscricaoMunicipal', label: 'Inscrição municipal', col: 'col-md-4' },
-          { name: 'regimeTributario', label: 'Regime tributário', type: 'select', options: [{ value: '', label: 'Selecione' }, { value: 'simples', label: 'Simples Nacional' }, { value: 'normal', label: 'Regime normal' }, { value: 'mei', label: 'MEI' }], col: 'col-md-4' },
+          { name: 'inscricaoEstadual', label: 'Inscrição estadual', col: 'col-md-4' },
+          { name: 'regimeTributario', label: 'Regime tributário', type: 'select', options: [{ value: 'simples', label: 'Simples Nacional' }, { value: 'normal', label: 'Regime normal' }, { value: 'mei', label: 'MEI' }], col: 'col-md-4' },
           { name: 'codigoMunicipio', label: 'Código IBGE do município', col: 'col-md-4' },
           { name: 'municipio', label: 'Município emissor', col: 'col-md-4' },
-          { type: 'section', label: 'Séries dos documentos' },
-          { name: 'serieNfe', label: 'Série NF-e', col: 'col-md-4' },
-          { name: 'serieNfce', label: 'Série NFC-e', col: 'col-md-4' },
-          { name: 'serieNfse', label: 'Série NFS-e', col: 'col-md-4' },
-          { type: 'custom', col: 'col-12', html: '<div class="alert alert-warning fs-8 mb-0"><i class="bi bi-lock me-1"></i>A chave da API, o certificado digital e a senha serão configurados posteriormente no backend/Secret Manager.</div>' }
+          { type: 'section', label: 'NFS-e · serviços veterinários' },
+          { name: 'codigoServico', label: 'Item da lista de serviços (LC 116)', col: 'col-md-4', placeholder: '05.01' },
+          { name: 'cnae', label: 'CNAE', col: 'col-md-4', placeholder: '7500100' },
+          { name: 'aliquotaIss', label: 'Alíquota de ISS (%)', type: 'number', step: '0.01', col: 'col-md-4', attrs: 'min="0" max="5"' },
+          { name: 'tipoTributacao', label: 'Tributação do ISS', type: 'select', required: true, options: TRIBUTACAO, col: 'col-md-6' },
+          { name: 'serieNfse', label: 'Série NFS-e', col: 'col-md-2' },
+          { name: 'serieNfe', label: 'Série NF-e', col: 'col-md-2' },
+          { name: 'serieNfce', label: 'Série NFC-e', col: 'col-md-2' },
+          { type: 'section', label: 'NF-e e NFC-e · produtos' },
+          { name: 'cfopPadrao', label: 'CFOP padrão', col: 'col-6 col-md-3', placeholder: '5102', attrs: 'maxlength="4" inputmode="numeric"' },
+          { name: 'csosnPadrao', label: 'CSOSN padrão (Simples)', type: 'select', col: 'col-6 col-md-3', options: [
+            { value: '102', label: '102 · Sem crédito' }, { value: '103', label: '103 · Isenta' }, { value: '300', label: '300 · Imune' }, { value: '400', label: '400 · Não tributada' }, { value: '500', label: '500 · ICMS por ST' }] },
+          { name: 'cstPisCofins', label: 'CST PIS/COFINS', type: 'select', col: 'col-6 col-md-3', options: [
+            { value: '49', label: '49 · Outras saídas' }, { value: '07', label: '07 · Isenta' }, { value: '99', label: '99 · Outras operações' }] },
+          { name: 'aliquotaIcms', label: 'ICMS % (regime normal)', type: 'number', step: '0.01', col: 'col-6 col-md-3', attrs: 'min="0" max="35"' },
+          { type: 'custom', col: 'col-12', html: '<div class="alert alert-info fs-8 mb-0"><i class="bi bi-info-circle me-1"></i>Os padrões 05.01 / CNAE 7500-1/00 (serviços veterinários) e CFOP 5102 / CSOSN 102 (revenda no Simples) são os mais comuns. Cada produto pode ter NCM, CFOP e CSOSN próprios em Produtos &amp; Serviços. Confirme tudo com o contador antes da produção. Na NFC-e de produção, o CSC da SEFAZ é cadastrado na TecnoSpeed junto com o certificado.</div>' }
         ],
-        onSubmit: async (d) => { await updateDoc(doc(db, 'clinicas', state.clinicaId), { fiscal: d }); Object.assign(c, { fiscal: d }); toast('Dados fiscais salvos'); }
+        onShown: (el) => {
+          const f = $('form', el);
+          mask(f.cnpj, 'cnpj');
+          const info = () => { $('#ambInfo', el).innerHTML = f.provedor.value === 'tecnospeed' ? (INFO_AMBIENTE[f.ambiente.value] || '') : 'Sem emissão integrada: registre as notas emitidas fora e gere recibos pelo Petzy.'; };
+          f.ambiente.addEventListener('change', info); f.provedor.addEventListener('change', info); info();
+        },
+        onSubmit: async (d) => {
+          const cnpj = String(d.cnpj || '').replace(/\D/g, '');
+          if (d.provedor === 'tecnospeed' && d.ambiente !== 'teste' && cnpj.length !== 14) throw new Error('Informe o CNPJ do emitente (14 dígitos) para homologação ou produção.');
+          if (d.aliquotaIss != null && (d.aliquotaIss < 0 || d.aliquotaIss > 5)) throw new Error('A alíquota de ISS deve ficar entre 0% e 5%.');
+          if (d.provedor === 'tecnospeed' && d.ambiente !== 'teste' && d.aliquotaIss == null && ![1, 2].includes(Number(d.tipoTributacao))) throw new Error('Informe a alíquota de ISS.');
+          d.tipoTributacao = Number(d.tipoTributacao) || 6;
+          d.cfopPadrao = String(d.cfopPadrao || '').replace(/\D/g, '');
+          if (d.cfopPadrao && d.cfopPadrao.length !== 4) throw new Error('O CFOP padrão deve ter 4 dígitos (ex.: 5102).');
+          await updateDoc(doc(db, 'clinicas', state.clinicaId), { fiscal: d });
+          await recarregarClinica();
+          Object.assign(c, { fiscal: d });
+          toast('Dados fiscais salvos');
+        }
       });
     };
 
@@ -412,7 +538,7 @@ export async function render(view) {
 
     $('#tbEquipe', view).onclick = async (e) => {
       const b = e.target.closest('button'); if (!b) return;
-      const m = equipe.find(x => x.id === (b.dataset.papel || b.dataset.modulos || b.dataset.toggle));
+      const m = equipe.find(x => x.id === (b.dataset.papel || b.dataset.modulos || b.dataset.toggle || b.dataset.comissao));
       if (b.dataset.toggle) {
         if (!m.ativo && equipe.filter(x => x.ativo).length >= limite) return toast('Limite de usuários do plano atingido.', 'warning');
         if (m.ativo && !(await confirmar(`Desativar o acesso de <strong>${esc(m.nome)}</strong>?`))) return;
@@ -423,11 +549,20 @@ export async function render(view) {
         fields: [{ name: 'papel', label: 'Função', type: 'select', required: true, options: Object.entries(PAPEIS).map(([v, l]) => ({ value: v, label: l })), col: 'col-12' }],
         onSubmit: async (d) => { await atualizarMembro(m.id, { papel: d.papel }); toast('Função alterada'); }
       });
+      if (b.dataset.comissao) formModal({
+        title: `Comissão de ${esc(m.nome)}`, size: 'sm', values: m,
+        fields: [
+          { name: 'comissaoPercentual', label: '% sobre vendas e atendimentos faturados', type: 'number', step: '0.1', col: 'col-12', attrs: 'min="0" max="100"' },
+          { type: 'custom', col: 'col-12', html: '<div class="fs-8 text-muted">Aplicado sobre as vendas do PDV feitas por esse profissional e sobre os atendimentos/agendamentos que ele concluiu. Veja o total em Relatórios › Comissões.</div>' }
+        ],
+        onSubmit: async (d) => { await atualizarMembro(m.id, { comissaoPercentual: Number(d.comissaoPercentual) || 0 }); toast('Comissão atualizada'); }
+      });
       if (b.dataset.modulos) {
         const labels = {
           dashboard: 'Dashboard', agenda: 'Agenda', clientes: 'Tutores', pets: 'Pets', prontuarios: 'Prontuários',
-          vacinas: 'Vacinas', pdv: 'PDV / Vendas', produtos: 'Produtos & Serviços', fornecedores: 'Fornecedores',
-          financeiro: 'Financeiro', fiscal: 'Fiscal', relatorios: 'Relatórios', configuracoes: 'Configurações'
+          vacinas: 'Vacinas', internacao: 'Internação', pdv: 'PDV / Vendas', produtos: 'Produtos & Serviços', fornecedores: 'Fornecedores',
+          financeiro: 'Financeiro', fiscal: 'Fiscal', relatorios: 'Relatórios', marketing: 'Marketing', bi: 'BI Avançado',
+          auditoria: 'Auditoria', configuracoes: 'Configurações'
         };
         const extras = m.modulosExtras || [], bloqueados = m.modulosBloqueados || [];
         formModal({
@@ -451,15 +586,45 @@ export async function render(view) {
     const ocupado = (btn, txt) => { btn.disabled = true; btn.dataset.html = btn.innerHTML; btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>${txt}`; };
     const livre = (btn) => { btn.disabled = false; btn.innerHTML = btn.dataset.html; };
 
+    // ---------- tabela de NCM ----------
+    const statusNcm = (r) => {
+      // async: se o usuário já saiu de Configurações antes desta Promise assentar, o elemento some do
+      // DOM (a view foi trocada) — sem essa guarda, a atribuição abaixo quebra o resto da aplicação.
+      const elStatus = $('#ncmStatus', view); if (!elStatus) return;
+      const dt = r?.atualizadoEm ? new Date(r.atualizadoEm).toLocaleDateString('pt-BR') : null;
+      elStatus.innerHTML = dt
+        ? `${esc(r.total)} códigos · atualizada em ${dt}${r.vigencia ? ' · ' + esc(r.vigencia) : ''}`
+        : 'Tabela ainda não baixada. Clique em "Atualizar" para buscar na Receita Federal.';
+    };
+    garantirCacheNcm().then(() => chamarFuncao('metaTabelaNcm', {})).then(statusNcm).catch(() => { const el = $('#ncmStatus', view); if (el) el.textContent = 'Não foi possível verificar a tabela agora.'; });
+    $('#btnNcmAtualizar', view).onclick = async (e) => {
+      const b = e.currentTarget; ocupado(b, 'Baixando...');
+      try {
+        const r = await atualizarTabelaNcm({ forcar: true });
+        statusNcm(r);
+        toast(r.fonteIndisponivel ? 'O Siscomex está indisponível agora; mantivemos a última tabela salva.' : 'Tabela de NCM atualizada ✔', r.fonteIndisponivel ? 'warning' : 'success');
+      } catch (err) { toast(err.code === 'functions/internal' && err.message === 'internal' ? 'O serviço está indisponível no momento.' : err.message, 'danger'); }
+      finally { livre(b); }
+    };
+
     $('#btnDemo', view).onclick = async (e) => {
       const b = e.currentTarget; // capturar antes de qualquer await (depois vira null)
-      if (!exigirLicenca()) return;
-      const jaTem = (await list('clientes', where('demo', '==', true))).length;
-      if (jaTem && !(await confirmar('Esta clínica já tem dados de exemplo. Gerar mais um conjunto?', { ok: 'Gerar', danger: false }))) return;
-      if (!jaTem && !(await confirmar('Gerar dados de exemplo nesta clínica? Você poderá removê-los depois.', { ok: 'Gerar', danger: false }))) return;
-      ocupado(b, 'Gerando...');
-      try { const n = await gerarDemo(); toast(`${n} registros de exemplo criados 🎉`); location.hash = '#/dashboard'; }
-      catch (err) { toast(err.message, 'danger'); livre(b); }
+      if (b.disabled || !exigirLicenca()) return;
+      b.disabled = true; // trava já no primeiro clique: evita gerar dois conjuntos
+      try {
+        const jaTem = (await list('clientes', where('demo', '==', true))).length > 0;
+        const ok = await confirmar(jaTem
+          ? 'Esta clínica já tem dados de exemplo. <strong>Recriar</strong> apaga os exemplos atuais e gera um conjunto novo e completo. Seus dados reais não são afetados.'
+          : 'Gerar dados de exemplo completos nesta clínica? Se a integração fiscal ainda não estiver configurada, ela será ativada no <strong>modo teste</strong> (sem valor fiscal). Você poderá remover tudo depois.',
+          { ok: jaTem ? 'Recriar exemplos' : 'Gerar', danger: false });
+        if (!ok) return;
+        ocupado(b, jaTem ? 'Recriando...' : 'Gerando...');
+        if (jaTem) await apagar(true);
+        const n = await gerarDemo();
+        toast(`${n} registros de exemplo criados 🎉`);
+        location.hash = '#/dashboard';
+      } catch (err) { toast(err.message, 'danger'); }
+      finally { if (b.dataset.html) livre(b); else b.disabled = false; }
     };
 
     $('#btnDemoLimpar', view).onclick = async (e) => {
@@ -524,7 +689,9 @@ async function salvarLogo(valor) {
 async function apagar(soDemo, progresso) {
   let total = 0;
   for (const nome of COLECOES) {
-    const docs = soDemo ? await list(nome, where('demo', '==', true)) : await list(nome);
+    let docs = soDemo ? await list(nome, where('demo', '==', true)) : await list(nome);
+    // notas transmitidas à prefeitura têm guarda obrigatória: não entram na limpeza
+    if (nome === 'fiscal') docs = docs.filter(d => d.integracao !== true || ['rascunho', 'rejeitada'].includes(d.status));
     for (let i = 0; i < docs.length; i += 400) {
       const b = writeBatch(db);
       docs.slice(i, i + 400).forEach(d => b.delete(ref(nome, d.id)));
@@ -537,74 +704,221 @@ async function apagar(soDemo, progresso) {
 }
 
 // ================= Dados de demonstração (todos marcados com demo: true) =================
+// Conjunto COMPLETO: todos os campos que as telas usam (dados fiscais, endereço com IBGE, fornecedores e compras,
+// contas a pagar, fiado, notas fiscais...). Ao criar um campo novo em qualquer cadastro, inclua-o aqui também.
 async function gerarDemo() {
   const rnd = (a) => a[Math.floor(Math.random() * a.length)];
   const rint = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const hoje = new Date();
+  const dia = (n) => toISODate(addDays(hoje, n));
   const agora = new Date().toISOString();
   const ops = [];
   const novo = (name, data) => { const r = doc(col(name)); ops.push([r, { ...data, demo: true, criadoEm: data.criadoEm || agora }]); return r.id; };
 
-  const nomes = ['Ana Beatriz Souza', 'Carlos Eduardo Lima', 'Fernanda Oliveira', 'João Pedro Santos', 'Mariana Costa', 'Rafael Almeida', 'Juliana Ferreira', 'Lucas Martins', 'Patrícia Rocha', 'Bruno Carvalho', 'Camila Ribeiro', 'Diego Nascimento'];
-  const pets = [['Thor', 'Cão', 'Golden Retriever'], ['Luna', 'Gato', 'Siamês'], ['Mel', 'Cão', 'Shih Tzu'], ['Bob', 'Cão', 'SRD'], ['Nina', 'Gato', 'Persa'], ['Max', 'Cão', 'Labrador'], ['Pipoca', 'Cão', 'Poodle'], ['Frida', 'Gato', 'SRD'], ['Zeus', 'Cão', 'Bulldog Francês'], ['Amora', 'Cão', 'Yorkshire'], ['Simba', 'Gato', 'Maine Coon'], ['Bidu', 'Cão', 'Beagle'], ['Kiara', 'Cão', 'Lhasa Apso'], ['Tom', 'Gato', 'SRD'], ['Paçoca', 'Cão', 'Pinscher'], ['Loki', 'Cão', 'Border Collie']];
+  // documentos com dígitos verificadores válidos
+  const cpf = () => {
+    const n = Array.from({ length: 9 }, () => rint(0, 9));
+    const dv = (a) => { const r = (a.reduce((s, d, i) => s + d * (a.length + 1 - i), 0) * 10) % 11; return r === 10 ? 0 : r; };
+    n.push(dv(n)); n.push(dv(n));
+    const t = n.join(''); return t.slice(0, 3) + '.' + t.slice(3, 6) + '.' + t.slice(6, 9) + '-' + t.slice(9);
+  };
+  const cnpj = () => {
+    const n = [...Array.from({ length: 8 }, () => rint(0, 9)), 0, 0, 0, 1];
+    const dv = (a) => { const pesos = a.length === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]; const r = a.reduce((s, d, i) => s + d * pesos[i], 0) % 11; return r < 2 ? 0 : 11 - r; };
+    n.push(dv(n)); n.push(dv(n));
+    const t = n.join(''); return t.slice(0, 2) + '.' + t.slice(2, 5) + '.' + t.slice(5, 8) + '/' + t.slice(8, 12) + '-' + t.slice(12);
+  };
+  const ean = () => { const d = [7, 8, 9, ...Array.from({ length: 9 }, () => rint(0, 9))]; const s = d.reduce((a, x, i) => a + x * (i % 2 ? 3 : 1), 0); d.push((10 - (s % 10)) % 10); return d.join(''); };
+  const telefone = () => '(11) 9' + rint(6000, 9999) + '-' + rint(1000, 9999);
 
-  const cIds = nomes.map(n => novo('clientes', { nome: n, telefone: `(11) 9${rint(8000, 9999)}-${rint(1000, 9999)}`, email: n.split(' ')[0].toLowerCase() + '@exemplo.com', cidade: 'São Paulo', uf: 'SP', criadoEm: toISODate(addDays(new Date(), -rint(1, 120))) }));
-  const pIds = pets.map(([nome, especie, raca], i) => ({
-    id: novo('pets', { nome, especie, raca, clienteId: cIds[i % cIds.length], sexo: rnd(['Macho', 'Fêmea']), peso: especie === 'Gato' ? rint(3, 6) : rint(4, 32), nascimento: toISODate(addDays(new Date(), -rint(200, 4000))), castrado: Math.random() > 0.4 }),
-    cid: cIds[i % cIds.length]
+  // ---------- fornecedores ----------
+  const fornecedores = [
+    ['Distribuidora PetFood Brasil Ltda', 'Marcos Andrade', 'petfood', 'Rua da Mooca, 1200 - Mooca, São Paulo/SP'],
+    ['VetFarma Distribuidora de Medicamentos', 'Luciana Prado', 'vetfarma', 'Av. Santo Amaro, 3500 - Brooklin, São Paulo/SP'],
+    ['Pet Acessórios Atacado', 'Ricardo Nunes', 'petacessorios', 'Rua Voluntários da Pátria, 800 - Santana, São Paulo/SP']
+  ].map(([nome, contato, dominio, endereco]) => ({
+    nome, id: novo('fornecedores', { nome, documento: cnpj(), contato, telefone: telefone(), email: 'vendas@' + dominio + '.com.br', endereco, observacoes: 'Pedido mínimo de R$ 500. Entrega em até 2 dias úteis.' })
   }));
 
-  const prods = [['Ração Premium Cães 15kg', 'Ração', 189.9, 132, 12], ['Ração Gatos Castrados 10kg', 'Ração', 159.9, 110, 8], ['Petisco Bifinho 500g', 'Petiscos', 29.9, 15, 30], ['Shampoo Neutro 500ml', 'Higiene', 34.9, 17, 3], ['Antipulgas Comprimido', 'Farmácia', 89.9, 55, 20], ['Vermífugo 4 comp.', 'Farmácia', 39.9, 21, 25], ['Coleira Antipulgas', 'Acessórios', 69.9, 38, 2], ['Brinquedo Mordedor', 'Brinquedos', 24.9, 9, 18]]
-    .map(([nome, categoria, precoVenda, precoCusto, estoque]) => ({ id: novo('produtos', { nome, categoria, precoVenda, precoCusto, estoque, estoqueMinimo: 5, unidade: 'un', tipo: 'produto', ativo: true }), nome, precoVenda, precoCusto }));
-  const servs = [['Consulta clínica', 'Consulta', 150, 30], ['Retorno', 'Consulta', 0, 20], ['Vacina V10', 'Vacina', 120, 15], ['Vacina Antirrábica', 'Vacina', 80, 15], ['Banho - porte pequeno', 'Banho', 60, 60], ['Banho & Tosa - porte médio', 'Tosa', 110, 90], ['Hemograma completo', 'Exame', 90, 20], ['Castração felina', 'Cirurgia', 450, 120]]
-    .map(([nome, categoria, precoVenda, duracao]) => ({ id: novo('produtos', { nome, categoria, precoVenda, duracao, tipo: 'servico', ativo: true }), nome, precoVenda, categoria }));
-
-  const tipoMap = { Consulta: 'consulta', Vacina: 'vacina', Banho: 'banho', Tosa: 'tosa', Exame: 'exame', Cirurgia: 'cirurgia' };
-  for (let i = 0; i < 22; i++) {
-    const d = addDays(new Date(), rint(-3, 4)); d.setHours(rint(8, 17), rnd([0, 30]), 0, 0);
-    const s = rnd(servs), p = rnd(pIds), passado = d < new Date();
-    novo('agendamentos', { petId: p.id, clienteId: p.cid, tipo: tipoMap[s.categoria] || 'consulta', servicoId: s.id, inicio: toISODateTime(d), duracao: 30, valor: s.precoVenda, profissionalId: state.user.uid, status: passado ? rnd(['concluido', 'concluido', 'concluido', 'faltou']) : rnd(['agendado', 'confirmado']) });
-  }
-
-  const casos = [
-    { diagnostico: 'Otite externa bacteriana', queixa: 'Coçando a orelha direita e balançando a cabeça há 5 dias', receita: [{ medicamento: 'Otológico (Otomax)', quantidade: '1 frasco', via: 'Otológica', posologia: 'Aplicar 5 gotas no ouvido direito a cada 12 horas, por 10 dias.' }] },
-    { diagnostico: 'Dermatite alérgica', queixa: 'Prurido intenso e vermelhidão na barriga', receita: [{ medicamento: 'Oclacitinib (Apoquel)', concentracao: '5,4 mg', quantidade: '1 caixa', via: 'Oral', posologia: 'Administrar 1 comprimido a cada 12 horas por 14 dias, depois 1 vez ao dia.' }] },
-    { diagnostico: 'Gastroenterite aguda', queixa: 'Vômito e diarreia desde ontem', receita: [{ medicamento: 'Ondansetrona', concentracao: '4 mg', quantidade: '1 caixa', via: 'Oral', posologia: 'Administrar 1/2 comprimido a cada 12 horas, por 3 dias.' }, { medicamento: 'Probiótico', quantidade: '1 bisnaga', via: 'Oral', posologia: 'Administrar 2 g uma vez ao dia, por 5 dias.' }] },
-    { diagnostico: 'Check-up anual, paciente saudável', queixa: 'Consulta de rotina', receita: [] }
-  ];
-  pIds.slice(0, 10).forEach(p => {
-    const k = rnd(casos);
-    novo('atendimentos', {
-      petId: p.id, clienteId: p.cid, tipo: 'Consulta', data: toISODateTime(addDays(new Date(), -rint(1, 90))), queixa: k.queixa, diagnostico: k.diagnostico,
-      temperatura: 38.5, fc: rint(80, 120), fr: rint(18, 30), tpc: 2, mucosas: 'Normocoradas', hidratacao: 'Normal', escore: 5,
-      exameSistemas: { tegumentar: { status: 'Normal', obs: '' }, cardio: { status: 'Normal', obs: '' }, resp: { status: 'Normal', obs: '' } },
-      receita: k.receita.map(i => ({ farmacia: 'Veterinária', concentracao: '', ...i, uso: D.usoDaVia(i.via) })),
-      vetId: state.user.uid, vetNome: state.perfil.nome, vetCrmv: state.perfil.crmv || ''
-    });
-    const apl = addDays(new Date(), -rint(200, 380));
-    novo('vacinas', { petId: p.id, nome: rnd(['V10 (Polivalente)', 'Antirrábica', 'V4 Felina']), dose: 'Reforço anual', dataAplicacao: toISODate(apl), proximaDose: toISODate(addDays(apl, 365)), fabricante: 'Zoetis', lote: 'L' + rint(10000, 99999), veterinario: state.perfil.nome });
+  // ---------- tutores (CPF válido e endereço completo com código IBGE, exigido na NF-e) ----------
+  const enderecos = [['Rua Augusta', 'Consolação', '01305-000'], ['Av. Paulista', 'Bela Vista', '01310-100'], ['Rua Oscar Freire', 'Jardim Paulista', '01426-001'],
+    ['Rua Vergueiro', 'Vila Mariana', '04101-000'], ['Rua Harmonia', 'Vila Madalena', '05435-000'], ['Rua dos Pinheiros', 'Pinheiros', '05422-001'],
+    ['Rua Tuiuti', 'Tatuapé', '03081-000'], ['Rua Domingos de Morais', 'Vila Mariana', '04010-100'], ['Av. Rebouças', 'Pinheiros', '05402-000'],
+    ['Rua Cardeal Arcoverde', 'Pinheiros', '05407-002'], ['Rua Voluntários da Pátria', 'Santana', '02010-000'], ['Rua Teodoro Sampaio', 'Pinheiros', '05406-000']];
+  const nomes = ['Ana Beatriz Souza', 'Carlos Eduardo Lima', 'Fernanda Oliveira', 'João Pedro Santos', 'Mariana Costa', 'Rafael Almeida', 'Juliana Ferreira', 'Lucas Martins', 'Patrícia Rocha', 'Bruno Carvalho', 'Camila Ribeiro', 'Diego Nascimento'];
+  const tutores = nomes.map((nome, i) => {
+    const [endereco, bairro, cep] = enderecos[i % enderecos.length];
+    const email = nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(' ').slice(0, 2).join('.') + '@exemplo.com';
+    return { nome, id: novo('clientes', {
+      nome, cpf: cpf(), telefone: telefone(), email, nascimento: dia(-rint(9000, 25000)),
+      cep, endereco, numero: String(rint(10, 2500)), bairro, cidade: 'São Paulo', uf: 'SP', ibge: '3550308',
+      obs: i % 4 === 0 ? 'Prefere contato por WhatsApp.' : '', criadoEm: dia(-rint(1, 120))
+    }) };
   });
 
-  for (let i = 0; i < 60; i++) {
-    const d = addDays(new Date(), -rint(0, 170)), it = rnd(prods), qtd = rint(1, 3), total = it.precoVenda * qtd, pag = rnd(['PIX', 'PIX', 'Cartão de crédito', 'Cartão de débito', 'Dinheiro']);
-    const vid = novo('vendas', { itens: [{ id: it.id, nome: it.nome, tipo: 'produto', preco: it.precoVenda, custo: it.precoCusto, qtd }], clienteId: rnd(cIds), total, subtotal: total, desconto: 0, pagamento: pag, status: 'concluida', data: d.toISOString().slice(0, 19), vendedor: state.perfil.nome });
-    novo('financeiro', { tipo: 'receita', categoria: 'Vendas PDV', descricao: `Venda PDV #${vid.slice(0, 6).toUpperCase()}`, valor: total, vencimento: toISODate(d), pago: true, pagoEm: toISODate(d), formaPagamento: pag, origem: 'venda', origemId: vid });
-  }
-  for (let m = 0; m < 6; m++) {
-    const base = new Date(); base.setMonth(base.getMonth() - m, 5);
-    const pago = m > 0 || new Date().getDate() >= 5;
-    [['Aluguel', 'Aluguel', 3500], ['Salários', 'Salários', 8200], ['Energia / Água', 'Energia / Água', rint(600, 900)], ['Fornecedores', 'Compra de ração e medicamentos', rint(2500, 4500)]]
-      .forEach(([categoria, descricao, valor]) => novo('financeiro', { tipo: 'despesa', categoria, descricao, valor, vencimento: toISODate(base), pago, pagoEm: pago ? toISODate(base) : null, formaPagamento: 'Boleto' }));
-    for (let k = 0; k < rint(25, 40); k++) {
-      const d = new Date(base); d.setDate(rint(1, 28)); if (d > new Date()) continue;
-      const s = rnd(servs.filter(x => x.precoVenda));
-      novo('financeiro', { tipo: 'receita', categoria: ['Banho', 'Tosa'].includes(s.categoria) ? 'Banho & Tosa' : 'Serviços clínicos', descricao: s.nome, valor: s.precoVenda, vencimento: toISODate(d), pago: true, pagoEm: toISODate(d), formaPagamento: rnd(['PIX', 'Cartão de crédito', 'Dinheiro']) });
+  // ---------- pets ----------
+  const listaPets = [['Thor', 'Cão', 'Golden Retriever', 'Grande', 'Dourada'], ['Luna', 'Gato', 'Siamês', 'Pequeno', 'Creme e marrom'], ['Mel', 'Cão', 'Shih Tzu', 'Pequeno', 'Branca e caramelo'],
+    ['Bob', 'Cão', 'SRD', 'Médio', 'Preta'], ['Nina', 'Gato', 'Persa', 'Pequeno', 'Branca'], ['Max', 'Cão', 'Labrador', 'Grande', 'Chocolate'], ['Pipoca', 'Cão', 'Poodle', 'Pequeno', 'Branca'],
+    ['Frida', 'Gato', 'SRD', 'Pequeno', 'Tricolor'], ['Zeus', 'Cão', 'Bulldog Francês', 'Pequeno', 'Tigrada'], ['Amora', 'Cão', 'Yorkshire', 'Mini', 'Preta e dourada'],
+    ['Simba', 'Gato', 'Maine Coon', 'Médio', 'Laranja rajada'], ['Bidu', 'Cão', 'Beagle', 'Médio', 'Tricolor'], ['Kiara', 'Cão', 'Lhasa Apso', 'Pequeno', 'Dourada'],
+    ['Tom', 'Gato', 'SRD', 'Pequeno', 'Cinza rajada'], ['Paçoca', 'Cão', 'Pinscher', 'Mini', 'Preta e marrom'], ['Loki', 'Cão', 'Border Collie', 'Médio', 'Preta e branca']];
+  const pesoPorPorte = { Mini: [2, 4], Pequeno: [4, 10], 'Médio': [10, 22], Grande: [22, 40] };
+  const alergias = ['Alérgico a dipirona', 'Sensível a frango na ração', 'Agitado ao manusear: usar focinheira'];
+  const pets = listaPets.map(([nome, especie, raca, porte, pelagem], i) => {
+    const tutor = tutores[i % tutores.length];
+    const [pmin, pmax] = especie === 'Gato' ? [3, 7] : pesoPorPorte[porte];
+    return { nome, especie, tutor, id: novo('pets', {
+      nome, especie, raca, porte, pelagem, clienteId: tutor.id, sexo: rnd(['Macho', 'Fêmea']), peso: r2(pmin + Math.random() * (pmax - pmin)),
+      nascimento: dia(-rint(200, 4000)), castrado: Math.random() > 0.4, microchip: i % 3 === 0 ? '98200000' + rint(1000000, 9999999) : '',
+      alergias: i % 5 === 0 ? rnd(alergias) : '', obs: i % 6 === 0 ? 'Tutor pede para avisar antes de aplicar qualquer medicação.' : ''
+    }) };
+  });
+
+  // ---------- produtos (NCM, CFOP, origem, CSOSN, código de barras, validade) ----------
+  const produtos = [
+    ['Ração Premium Cães 15kg', 'Ração', 189.9, 132, 12, 0, 240], ['Ração Gatos Castrados 10kg', 'Ração', 159.9, 110, 8, 0, 200],
+    ['Petisco Bifinho 500g', 'Petiscos', 29.9, 15, 30, 0, 180], ['Shampoo Neutro 500ml', 'Higiene', 34.9, 17, 3, 2, 540],
+    ['Antipulgas Comprimido', 'Farmácia', 89.9, 55, 20, 1, 400], ['Vermífugo 4 comp.', 'Farmácia', 39.9, 21, 25, 1, 365],
+    ['Coleira Antipulgas', 'Acessórios', 69.9, 38, 2, 2, 0], ['Brinquedo Mordedor', 'Brinquedos', 24.9, 9, 18, 2, 0]
+  ].map(([nome, categoria, precoVenda, precoCusto, estoque, forn, validade]) => {
+    const dados = { nome, categoria, codigo: ean(), unidade: 'un', precoCusto, precoVenda, estoque, estoqueMinimo: 5, validade: validade ? dia(validade) : '',
+      tipo: 'produto', ativo: true, ncm: NCM_SUGERIDO[categoria] || '', cfop: '5102', origem: '0', icmsSituacao: '102', cest: '' };
+    return { ...dados, fornecedor: fornecedores[forn], id: novo('produtos', dados) };
+  });
+  const servicos = [['Consulta clínica', 'Consulta', 150, 30], ['Retorno', 'Consulta', 0, 20], ['Vacina V10', 'Vacina', 120, 15], ['Vacina Antirrábica', 'Vacina', 80, 15],
+    ['Banho - porte pequeno', 'Banho', 60, 60], ['Banho & Tosa - porte médio', 'Tosa', 110, 90], ['Hemograma completo', 'Exame', 90, 20], ['Castração felina', 'Cirurgia', 450, 120]]
+    .map(([nome, categoria, precoVenda, duracao], i) => ({ nome, categoria, precoVenda, id: novo('produtos', { nome, categoria, codigo: 'SRV' + String(i + 1).padStart(3, '0'), precoVenda, duracao, tipo: 'servico', ativo: true }) }));
+
+  // ---------- compras (entradas de estoque) e contas a pagar com boleto de 30 dias ----------
+  produtos.forEach((p) => {
+    for (const diasAtras of [rint(45, 90), rint(1, 12)]) { // uma compra antiga (paga) e uma recente (boleto em aberto)
+      const f = p.fornecedor, qtd = rint(6, 24), total = r2(qtd * p.precoCusto), nf = String(rint(10000, 99999));
+      const data = addDays(hoje, -diasAtras), venc = toISODate(addDays(data, 30));
+      const movId = novo('movimentacoes', { produtoId: p.id, produto: p.nome, tipo: 'entrada', quantidade: qtd, motivo: 'Reposição de estoque',
+        fornecedorId: f.id, fornecedor: f.nome, notaFiscal: nf, custoUnitario: p.precoCusto, totalCompra: total, data: data.toISOString() });
+      const pago = venc < dia(0);
+      novo('financeiro', { tipo: 'despesa', categoria: 'Fornecedores', descricao: 'Compra de ' + p.nome + ' · ' + f.nome, valor: total, vencimento: venc,
+        pago, pagoEm: pago ? venc : null, formaPagamento: 'Boleto', fornecedorId: f.id, fornecedor: f.nome, notaFiscal: nf, origem: 'movimentacao', origemId: movId, produtoId: p.id });
     }
+  });
+
+  // ---------- agenda (concluídos já faturados no financeiro, como a tela faz) ----------
+  const tipoMap = { Consulta: 'consulta', Vacina: 'vacina', Banho: 'banho', Tosa: 'tosa', Exame: 'exame', Cirurgia: 'cirurgia' };
+  for (let i = 0; i < 22; i++) {
+    const d = addDays(hoje, rint(-3, 4)); d.setHours(rint(8, 17), rnd([0, 30]), 0, 0);
+    const s = rnd(servicos), p = rnd(pets), passado = d < hoje;
+    const status = passado ? rnd(['concluido', 'concluido', 'concluido', 'faltou']) : rnd(['agendado', 'confirmado']);
+    const tipo = tipoMap[s.categoria] || 'consulta';
+    const faturado = status === 'concluido' && s.precoVenda > 0;
+    const agId = novo('agendamentos', { petId: p.id, clienteId: p.tutor.id, tipo, servicoId: s.id, inicio: toISODateTime(d), duracao: 30, valor: s.precoVenda,
+      profissionalId: state.user.uid, status, faturado, buscaLeva: ['banho', 'tosa'].includes(tipo) && i % 3 === 0, obs: i % 5 === 0 ? 'Tutor pediu confirmação por WhatsApp.' : '' });
+    if (faturado) novo('financeiro', { tipo: 'receita', categoria: ['banho', 'tosa'].includes(tipo) ? 'Banho & Tosa' : 'Serviços clínicos', descricao: s.nome + ' - ' + p.nome + ' (' + p.tutor.nome + ')',
+      valor: s.precoVenda, vencimento: toISODate(d), pago: true, pagoEm: toISODate(d), formaPagamento: rnd(['PIX', 'Cartão de crédito', 'Dinheiro']), origem: 'agendamento', origemId: agId, clienteId: p.tutor.id });
   }
+
+  // ---------- prontuários completos ----------
+  const casos = [
+    { diagnostico: 'Otite externa bacteriana', sistema: 'ouvidos', achado: 'Conduto auditivo direito eritematoso, com secreção acastanhada e odor.', queixa: 'Coçando a orelha direita e balançando a cabeça há 5 dias',
+      diferenciais: 'Otite por Malassezia; corpo estranho no conduto.', exames: ['Citologia'], retorno: 10, orientacoes: 'Não molhar as orelhas durante o tratamento. Retornar se piorar.',
+      receita: [{ medicamento: 'Otológico (Otomax)', quantidade: '1 frasco', via: 'Otológica', posologia: 'Aplicar 5 gotas no ouvido direito a cada 12 horas, por 10 dias.' }] },
+    { diagnostico: 'Dermatite alérgica', sistema: 'tegumentar', achado: 'Eritema e escoriações em região abdominal e axilas.', queixa: 'Prurido intenso e vermelhidão na barriga',
+      diferenciais: 'Dermatite atópica; alergia alimentar; escabiose.', exames: ['Hemograma completo'], retorno: 14, orientacoes: 'Evitar banhos frequentes. Manter o antipulgas em dia.',
+      receita: [{ medicamento: 'Oclacitinib (Apoquel)', concentracao: '5,4 mg', quantidade: '1 caixa', via: 'Oral', posologia: 'Administrar 1 comprimido a cada 12 horas por 14 dias, depois 1 vez ao dia.' }] },
+    { diagnostico: 'Gastroenterite aguda', sistema: 'digest', achado: 'Desconforto à palpação abdominal, borborigmos aumentados.', queixa: 'Vômito e diarreia desde ontem',
+      diferenciais: 'Indiscrição alimentar; parvovirose; corpo estranho.', exames: ['Hemograma completo', 'Parasitológico de fezes'], retorno: 3, orientacoes: 'Oferecer água aos poucos e dieta leve por 3 dias.',
+      receita: [{ medicamento: 'Ondansetrona', concentracao: '4 mg', quantidade: '1 caixa', via: 'Oral', posologia: 'Administrar 1/2 comprimido a cada 12 horas, por 3 dias.' },
+        { medicamento: 'Probiótico', quantidade: '1 bisnaga', via: 'Oral', posologia: 'Administrar 2 g uma vez ao dia, por 5 dias.' }] },
+    { diagnostico: 'Check-up anual, paciente saudável', sistema: '', achado: '', queixa: 'Consulta de rotina', diferenciais: '', exames: ['Hemograma completo', 'Bioquímico (ALT, FA, ureia, creatinina)'],
+      retorno: 365, orientacoes: 'Manter vacinação e vermifugação em dia.', receita: [] }
+  ];
+  const sistemas = D.SISTEMAS.map(([k]) => k);
+  pets.slice(0, 10).forEach(p => {
+    const k = rnd(casos);
+    const dataAt = addDays(hoje, -rint(1, 90)); dataAt.setHours(rint(8, 17), rnd([0, 15, 30, 45]), 0, 0);
+    const exameSistemas = Object.fromEntries(sistemas.map(sis => [sis, sis === k.sistema ? { status: 'Alterado', obs: k.achado } : { status: 'Normal', obs: '' }]));
+    novo('atendimentos', {
+      petId: p.id, clienteId: p.tutor.id, tipo: 'Consulta', data: toISODateTime(dataAt), queixa: k.queixa,
+      anamnese: 'Tutor relata início há poucos dias, sem outros sinais. Alimentação e ingestão de água normais.', alimentacao: 'Ração premium, 2 vezes ao dia',
+      ambiente: rnd(['Apartamento, sem acesso à rua', 'Casa com quintal, convive com outro cão', 'Casa, passeios diários']), medicacoesUso: 'Nenhuma', vacinacaoEmDia: 'Em dia',
+      antecedentes: 'Sem histórico de doenças relevantes.', peso: rint(4, 30), temperatura: 38.5, fc: rint(80, 120), fr: rint(18, 30), tpc: 2,
+      mucosas: 'Normocoradas', hidratacao: 'Normal', escore: 5, dor: k.sistema ? 3 : 0, estadoMental: 'Alerta', exameSistemas,
+      exameFisico: k.achado || 'Exame físico sem alterações.', diagnostico: k.diagnostico, diferenciais: k.diferenciais, prognostico: 'Favorável',
+      procedimentos: k.sistema ? 'Limpeza e avaliação clínica.' : '', examesSolicitados: k.exames, exames: '', retorno: toISODate(addDays(dataAt, k.retorno)),
+      orientacoes: k.orientacoes, receita: k.receita.map(i => ({ farmacia: 'Veterinária', concentracao: '', ...i, uso: D.usoDaVia(i.via) })),
+      receitaObs: k.receita.length ? 'Administrar junto com alimento. Em caso de reação, suspender e entrar em contato.' : '', receitaControle: false,
+      vetId: state.user.uid, vetNome: state.perfil.nome, vetCrmv: state.perfil.crmv || ''
+    });
+    // reforço entre 15 dias atrasado e 35 dias à frente (aparece em "atrasadas" e "próximos 30 dias")
+    const apl = addDays(hoje, -rint(330, 380));
+    novo('vacinas', { petId: p.id, nome: p.especie === 'Gato' ? 'V4 Felina' : rnd(['V10 (Polivalente)', 'Antirrábica']), dose: 'Reforço anual', dataAplicacao: toISODate(apl),
+      proximaDose: toISODate(addDays(apl, 365)), fabricante: rnd(['Zoetis', 'MSD Saúde Animal', 'Boehringer Ingelheim']), lote: 'L' + rint(10000, 99999), veterinario: state.perfil.nome, obs: 'Sem reações.' });
+  });
+
+  // ---------- modelos de receita ----------
+  casos.filter(k => k.receita.length).forEach(k => novo('modelosReceita', { nome: k.diagnostico, itens: k.receita.map(i => ({ farmacia: 'Veterinária', concentracao: '', ...i, uso: D.usoDaVia(i.via) })), obs: k.orientacoes }));
+
+  // ---------- vendas do PDV (com serviços, desconto e fiado) ----------
+  for (let i = 0; i < 60; i++) {
+    const fiado = i % 12 === 0;
+    const d = addDays(hoje, fiado ? -rint(0, 20) : -rint(0, 170)); d.setHours(rint(8, 19), rint(0, 59), 0, 0);
+    const itens = [];
+    for (let k = 0; k < rint(1, 3); k++) {
+      const pr = rnd(produtos);
+      if (!itens.some(x => x.id === pr.id)) itens.push({ id: pr.id, nome: pr.nome, tipo: 'produto', preco: pr.precoVenda, custo: pr.precoCusto, qtd: rint(1, 2) });
+    }
+    if (i % 5 === 0) { const sv = rnd(servicos.filter(x => x.precoVenda)); itens.push({ id: sv.id, nome: sv.nome, tipo: 'servico', preco: sv.precoVenda, custo: 0, qtd: 1 }); }
+    const subtotal = r2(itens.reduce((s, x) => s + x.preco * x.qtd, 0));
+    const desconto = i % 7 === 0 ? r2(subtotal * 0.05) : 0, total = r2(subtotal - desconto);
+    const pet = rnd(pets);
+    const pag = fiado ? 'Fiado (a receber)' : rnd(['PIX', 'PIX', 'Cartão de crédito', 'Cartão de débito', 'Dinheiro']);
+    const vid = novo('vendas', { itens, clienteId: pet.tutor.id, petId: pet.id, total, subtotal, desconto, pagamento: pag, status: 'concluida',
+      data: toISODateTime(d) + ':00', vendedorId: state.user.uid, vendedor: state.perfil.nome });
+    const venc = fiado ? toISODate(addDays(d, 30)) : toISODate(d);
+    const pago = !fiado || venc < dia(-5);
+    novo('financeiro', { tipo: 'receita', categoria: itens.every(x => x.tipo === 'servico') ? 'Serviços' : 'Vendas PDV', descricao: 'Venda PDV #' + vid.slice(0, 6).toUpperCase() + ' - ' + pet.tutor.nome,
+      valor: total, vencimento: venc, pago, pagoEm: pago ? venc : null, formaPagamento: pag, origem: 'venda', origemId: vid, clienteId: pet.tutor.id });
+  }
+
+  // ---------- despesas fixas (6 meses): pagas até hoje; as do mês ainda por vencer ficam em aberto ----------
+  for (let m = 0; m < 6; m++) {
+    [['Aluguel', 'Aluguel', 3500, 5], ['Salários', 'Salários', 8200, 5], ['Energia / Água', 'Energia / Água', rint(600, 900), 12],
+      ['Internet / Telefone', 'Internet e telefone', 199.9, 15], ['Software', 'Assinatura Petzy', 149.9, 20]].forEach(([categoria, descricao, valor, diaVenc]) => {
+      const v = new Date(hoje.getFullYear(), hoje.getMonth() - m, diaVenc);
+      const venc = toISODate(v), pago = venc < dia(0) && !(m === 0 && categoria === 'Energia / Água'); // conta de luz do mês vencida e em aberto
+      novo('financeiro', { tipo: 'despesa', categoria, descricao, valor, vencimento: venc, pago, pagoEm: pago ? venc : null, formaPagamento: 'Boleto' });
+    });
+  }
+
+  // ---------- notas fiscais: histórico registrado e rascunhos prontos para emitir no modo teste ----------
+  for (let i = 1; i <= 4; i++) {
+    const t = rnd(tutores), d = addDays(hoje, -30 * i);
+    novo('fiscal', { tipo: 'nfse', integracao: false, status: 'emitida', numero: String(2026000 + i), serie: '1', dataEmissao: toISODate(d), emitidaEm: d.toISOString(),
+      clienteId: t.id, descricao: 'Consulta clínica veterinária e aplicação de vacina.', valor: 270, observacoes: 'Nota emitida no site da prefeitura (exemplo).' });
+  }
+  const tNfse = tutores[0];
+  novo('fiscal', { tipo: 'nfse', integracao: true, status: 'rascunho', dataEmissao: dia(0), clienteId: tNfse.id, tomadorCpf: '',
+    descricao: 'Consulta clínica veterinária do paciente ' + pets[0].nome + '.', valor: 150, observacoes: 'Rascunho de exemplo: clique em Emitir (modo teste).' });
+  const itensNfce = produtos.slice(0, 2).map(pr => ({ produtoId: pr.id, nome: pr.nome, codigo: pr.codigo, qtd: 1, preco: pr.precoVenda, unidade: pr.unidade,
+    ncm: pr.ncm, cfop: pr.cfop, cest: '', origem: pr.origem, icmsSituacao: pr.icmsSituacao }));
+  novo('fiscal', { tipo: 'nfce', integracao: true, status: 'rascunho', dataEmissao: dia(0), clienteId: tutores[1].id, tomadorCpf: '', pagamento: 'PIX', desconto: 0,
+    itens: itensNfce, valor: r2(itensNfce.reduce((s, x) => s + x.preco, 0)), descricao: 'Venda de produtos (exemplo)', observacoes: 'Rascunho de exemplo: clique em Emitir (modo teste).' });
 
   for (let i = 0; i < ops.length; i += 400) {
     const b = writeBatch(db);
     ops.slice(i, i + 400).forEach(([r, d]) => b.set(r, d));
     await b.commit();
+  }
+
+  // integração fiscal em modo teste (sem valor fiscal), só se a clínica ainda não configurou nenhuma
+  const fiscalAtual = state.clinica?.fiscal || {};
+  if (!['tecnospeed', 'plugnotas'].includes(fiscalAtual.provedor)) {
+    await updateDoc(doc(db, 'clinicas', state.clinicaId), { fiscal: {
+      regimeTributario: 'simples', codigoServico: '05.01', cnae: '7500100', tipoTributacao: 6, aliquotaIss: 2,
+      cfopPadrao: '5102', csosnPadrao: '102', cstPisCofins: '49', serieNfse: '1', serieNfe: '1', serieNfce: '1',
+      ...fiscalAtual, provedor: 'tecnospeed', ambiente: 'teste'
+    } });
+    await recarregarClinica();
   }
   return ops.length;
 }

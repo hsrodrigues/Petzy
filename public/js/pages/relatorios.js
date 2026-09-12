@@ -16,13 +16,17 @@ export async function render(view) {
         </select>
         <input type="date" class="form-control w-auto" id="ini"><input type="date" class="form-control w-auto" id="fim">
         <button class="btn btn-light border" id="limparFiltros" title="Limpar filtros"><i class="bi bi-x-circle me-1"></i>Limpar</button>
-        <button class="btn btn-light border" id="btnCsv"><i class="bi bi-download me-1"></i>CSV</button>
+        <button class="btn btn-light border" id="btnCsv"><i class="bi bi-download me-1"></i>Top itens (CSV)</button>
+        <button class="btn btn-light border" id="btnCsvContador"><i class="bi bi-journal-text me-1"></i>Lançamentos (contador)</button>
+        <button class="btn btn-light border" id="btnCsvComissoes"><i class="bi bi-percent me-1"></i>Comissões (CSV)</button>
         <button class="btn btn-outline-primary" id="btnGerencial"><i class="bi bi-file-earmark-pdf me-1"></i>Relatório PDF</button>
         <button class="btn btn-primary" id="btnDre"><i class="bi bi-file-earmark-bar-graph me-1"></i>DRE para contador</button>
       </div>`)}
     <div id="conteudo"></div>`;
 
   let exportRows = [];
+  let lancamentosRows = [];
+  let comissoesRows = [];
   let relatorioAtual = null;
 
   function aplicarPreset() {
@@ -37,11 +41,12 @@ export async function render(view) {
     const fimX = toISODate(addDays(new Date(fim + 'T00:00'), 1));
     $('#conteudo', view).innerHTML = '<div class="loading"><div class="spinner-border"></div></div>';
 
-    const [vendas, fin, ags, atend] = await Promise.all([
+    const [vendas, fin, ags, atend, equipe] = await Promise.all([
       list('vendas', where('data', '>=', ini), where('data', '<', fimX)),
       list('financeiro', where('vencimento', '>=', ini), where('vencimento', '<', fimX)),
       list('agendamentos', where('inicio', '>=', ini), where('inicio', '<', fimX)),
-      list('atendimentos', where('data', '>=', ini), where('data', '<', fimX))
+      list('atendimentos', where('data', '>=', ini), where('data', '<', fimX)),
+      list('equipe')
     ]);
     const novosClientes = dados.clientes.filter(c => c.criadoEm >= ini && c.criadoEm < fimX).length;
 
@@ -65,7 +70,26 @@ export async function render(view) {
     ags.filter(a => a.faturado).forEach(a => a.clienteId && (cli[a.clienteId] = (cli[a.clienteId] || 0) + (a.valor || 0)));
     const topCli = Object.entries(cli).sort((a, b) => b[1] - a[1]).slice(0, 8);
 
+    // comissões por profissional: % configurado em Configurações › Equipe sobre vendas do PDV
+    // (vendedorId) e sobre agendamentos/atendimentos concluídos e já faturados (profissionalId)
+    const comissoes = equipe.filter(m => m.comissaoPercentual > 0).map(m => {
+      const vendasBase = vOk.filter(v => v.vendedorId === m.id).reduce((s, v) => s + v.total, 0);
+      const servicosBase = ags.filter(a => a.profissionalId === m.id && a.faturado).reduce((s, a) => s + (a.valor || 0), 0);
+      const base = vendasBase + servicosBase;
+      return { nome: m.nome, pct: m.comissaoPercentual, vendasBase, servicosBase, base, comissao: base * m.comissaoPercentual / 100 };
+    }).sort((a, b) => b.comissao - a.comissao);
+    comissoesRows = comissoes.map(c => ({
+      Profissional: c.nome, VendasPDV: c.vendasBase.toFixed(2).replace('.', ','), Servicos: c.servicosBase.toFixed(2).replace('.', ','),
+      Base: c.base.toFixed(2).replace('.', ','), Percentual: c.pct, Comissao: c.comissao.toFixed(2).replace('.', ',')
+    }));
+
     exportRows = top.map(([nome, r]) => ({ Item: nome, Tipo: r.tipo, Quantidade: r.qtd, Total: r.total.toFixed(2).replace('.', ',') }));
+    // ledger completo do período, no formato que a maioria dos escritórios de contabilidade pede para lançar
+    lancamentosRows = fin.slice().sort((a, b) => (a.vencimento || '').localeCompare(b.vencimento || '')).map(f => ({
+      Data: f.vencimento, Tipo: f.tipo === 'receita' ? 'Receita' : 'Despesa', Categoria: f.categoria || 'Outros',
+      Descricao: f.descricao || '', Valor: (Number(f.valor) || 0).toFixed(2).replace('.', ','),
+      FormaPagamento: f.formaPagamento || '', Status: f.pago ? 'Pago' : 'Em aberto', DataPagamento: f.pagoEm || ''
+    }));
     const porCategoria = (tipo, somentePagos = true) => fin.filter(f => f.tipo === tipo && (!somentePagos || f.pago)).reduce((acc, f) => {
       const chave = f.categoria || 'Outros';
       acc[chave] = (acc[chave] || 0) + (Number(f.valor) || 0);
@@ -102,6 +126,14 @@ export async function render(view) {
         <div class="col-lg-5"><div class="card h-100"><div class="card-header">Melhores clientes</div><div class="list-group list-group-flush">
           ${topCli.length ? topCli.map(([id, v], i) => `<div class="list-group-item d-flex justify-content-between align-items-center"><span class="fs-7"><span class="text-muted me-2">${i + 1}.</span>${esc(C[id]?.nome || '—')}</span><strong class="fs-7">${money(v)}</strong></div>`).join('') : '<div class="p-4 text-center text-muted fs-7">Sem dados</div>'}
         </div></div></div>
+      </div>
+      <div class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center"><span><i class="bi bi-percent me-1"></i>Comissões do período</span>
+          <span class="fs-7 text-muted">Configure o % em Configurações › Equipe</span></div>
+        <div class="table-responsive"><table class="table"><thead><tr><th>Profissional</th><th class="text-end">Vendas PDV</th><th class="text-end">Serviços</th><th class="text-end">Base</th><th class="text-end">%</th><th class="text-end">Comissão</th></tr></thead><tbody>
+          ${comissoes.length ? comissoes.map(c => `<tr><td class="fs-7 fw-semibold">${esc(c.nome)}</td><td class="text-end fs-7">${money(c.vendasBase)}</td><td class="text-end fs-7">${money(c.servicosBase)}</td><td class="text-end fs-7">${money(c.base)}</td><td class="text-end fs-7">${num(c.pct, 1)}%</td><td class="text-end fw-semibold">${money(c.comissao)}</td></tr>`).join('')
+            : '<tr><td colspan="6" class="text-center text-muted py-4 fs-7">Nenhum profissional com comissão configurada.</td></tr>'}
+        </tbody></table></div>
       </div>`;
 
     charts.forEach(c => c.destroy()); charts = [];
@@ -159,6 +191,8 @@ export async function render(view) {
   $('#ini', view).onchange = $('#fim', view).onchange = () => { $('#preset', view).value = 'custom'; carregar(); };
   $('#limparFiltros', view).onclick = () => { $('#preset', view).value = '30'; aplicarPreset(); carregar(); };
   $('#btnCsv', view).onclick = () => exportCSV('relatorio-itens.csv', exportRows);
+  $('#btnCsvContador', view).onclick = () => lancamentosRows.length ? exportCSV('lancamentos-financeiro.csv', lancamentosRows) : toast('Nenhum lançamento no período.', 'warning');
+  $('#btnCsvComissoes', view).onclick = () => comissoesRows.length ? exportCSV('comissoes.csv', comissoesRows) : toast('Nenhuma comissão configurada ou nenhuma base no período.', 'warning');
   $('#btnGerencial', view).onclick = () => abrirRelatorio('gerencial');
   $('#btnDre', view).onclick = () => abrirRelatorio('dre');
 

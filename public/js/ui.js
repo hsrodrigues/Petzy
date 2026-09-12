@@ -50,6 +50,8 @@ el.setAttribute('role', type === 'danger' ? 'alert' : 'status');
   el.innerHTML = `<div class="d-flex"><div class="toast-body d-flex gap-2 align-items-center">
     <i class="bi bi-${icons[type] || icons.info} text-${type} fs-5"></i><span>${esc(msg)}</span></div>
     <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
+  // um aviso por vez: empilhados, eles desciam até cobrir os botões de ação do cabeçalho (Novo item, Nova nota...)
+  box.replaceChildren();
   box.appendChild(el);
   const t = new bootstrap.Toast(el, { delay: 3500 });
   el.addEventListener('hidden.bs.toast', () => el.remove());
@@ -102,11 +104,17 @@ export function fieldHtml(f, v) {
     case 'textarea':
       return `<div class="${col}">${lbl}<textarea class="form-control" rows="${f.rows || 3}" ${attrs}>${esc(val)}</textarea></div>`;
     case 'select': {
-      const opts = (f.options || []).map(o => {
-        const [ov, ol] = typeof o === 'object' ? [o.value, o.label] : [o, o];
-        return `<option value="${esc(ov)}" ${String(ov) === String(val) ? 'selected' : ''}${o?.busca ? ` data-busca="${esc(o.busca)}"` : ''}>${esc(ol)}</option>`;
-      }).join('');
-      return `<div class="${col}">${lbl}<select class="form-select" ${attrs}${f.search ? ' data-busca-select' : ''}>${f.required ? '' : '<option value="">—</option>'}${opts}</select></div>`;
+      const lista = (f.options || []).map(o => typeof o === 'object' ? o : { value: o, label: o });
+      // Um <select required> sem opção "vazia" faz o navegador selecionar a 1ª opção sozinho quando
+      // nada bate com o valor atual (campo novo, ou um id de registro apagado). Isso associaria o
+      // registro a um pet/tutor errado sem o usuário perceber — por isso, nesse caso, força um
+      // placeholder desabilitado em vez de deixar a 1ª opção da lista "escolhida" por acidente.
+      const bate = lista.some(o => String(o.value) === String(val));
+      const opts = lista.map(o =>
+        `<option value="${esc(o.value)}" ${String(o.value) === String(val) ? 'selected' : ''}${o.busca ? ` data-busca="${esc(o.busca)}"` : ''}>${esc(o.label)}</option>`
+      ).join('');
+      const placeholder = f.required ? (bate ? '' : '<option value="" selected disabled hidden>Selecione...</option>') : '<option value="">—</option>';
+      return `<div class="${col}">${lbl}<select class="form-select" ${attrs}${f.search ? ' data-busca-select' : ''}>${placeholder}${opts}</select></div>`;
     }
     case 'checkbox':
       return `<div class="${col} d-flex align-items-end"><div class="form-check form-switch mb-2">
@@ -168,6 +176,26 @@ export const kpi = (icon, label, value, color = 'primary') =>
     <div><div class="kpi-value">${value}</div><div class="kpi-label">${label}</div></div></div></div>`;
 
 export const badge = (text, color = 'secondary') => `<span class="badge badge-soft-${color}">${esc(text)}</span>`;
+
+// KPI mais rico, usado no dashboard: aceita uma tendência (comparação com o período anterior) ou uma
+// legenda simples. `trend.subiu` decide a seta (para cima/para baixo) e `trend.bom` decide a cor
+// (verde/vermelho) — são coisas diferentes, porque para despesa "subir" é ruim, não bom.
+export function kpiTrend({ icon, label, value, color = 'primary', trend, sub }) {
+  let rodape = '';
+  if (trend) {
+    const cor = trend.bom === true ? 'up' : trend.bom === false ? 'down' : '';
+    const seta = trend.subiu == null ? '' : `<i class="bi bi-arrow-${trend.subiu ? 'up' : 'down'}-short"></i>`;
+    rodape = `<span class="kpi-trend ${cor}">${seta}${esc(trend.text)}</span>`;
+  } else if (sub) rodape = `<span class="kpi-sub">${esc(sub)}</span>`;
+  return `<div class="card h-100 kpi-card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-start mb-2">
+      <div class="kpi-icon-v2 badge-soft-${color}"><i class="bi bi-${icon}"></i></div>
+      ${rodape}
+    </div>
+    <div class="kpi-value-v2">${value}</div>
+    <div class="kpi-label-v2">${label}</div>
+  </div></div>`;
+}
 
 export function exportCSV(filename, rows) {
   if (!rows.length) return toast('Nada para exportar', 'warning');
@@ -271,3 +299,7 @@ export function selectBusca(sel) {
 }
 
 export function ativarBusca(root) { root.querySelectorAll('select[data-busca-select]').forEach(selectBusca); }
+
+// data e hora LOCAIS com segundos (YYYY-MM-DDTHH:MM:SS). Não use toISOString() para datas de negócio:
+// ele converte para UTC e, no Brasil, depois das 21h a data vira o dia seguinte.
+export const agoraLocal = (d = new Date()) => `${toISODateTime(d)}:${String(d.getSeconds()).padStart(2, '0')}`;

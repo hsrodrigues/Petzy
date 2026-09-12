@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Política de Privacidade · Petzy</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐾</text></svg>">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="assets/css/style.css" rel="stylesheet">
+  <style>
+    body { background: #fff; }
+    .legal { max-width: 760px; margin: 0 auto; padding: 3rem 1.25rem 5rem; line-height: 1.7; }
+    .legal h1 { font-weight: 800; margin-bottom: .25rem; }
+    .legal h2 { font-size: 1.15rem; font-weight: 700; margin-top: 2.2rem; color: #3d2fb8; }
+    .legal .aviso { background: #fff8e1; border-left: 4px solid #f59e0b; padding: 1rem 1.2rem; border-radius: 8px; margin: 1.5rem 0; font-size: .9rem; }
+    .legal .placeholder { background: #ffe8e8; padding: 0 .3rem; border-radius: 4px; }
+    .legal table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: .88rem; }
+    .legal th, .legal td { border: 1px solid #e5e6ef; padding: .5rem .6rem; text-align: left; vertical-align: top; }
+    .legal th { background: #fafaff; }
+  </style>
+</head>
+<body>
+<div class="legal">
+  <a href="index.html" class="d-inline-flex align-items-center gap-2 text-decoration-none mb-4"><span class="brand-logo" style="width:32px;height:32px;font-size:1rem">🐾</span><strong>Petzy</strong></a>
+  <h1>Política de Privacidade</h1>
+  <p class="text-muted">Última atualização: <span class="placeholder" id="fAtualizado">[preencher data]</span></p>
+
+  <div class="aviso"><strong>Aviso:</strong> este é um modelo inicial de Política de Privacidade, alinhado à Lei Geral de Proteção de Dados (LGPD, Lei 13.709/2018). Antes de publicar oficialmente, recomenda-se revisão por um(a) advogado(a) especializado(a), além de preencher os campos marcados em <span class="placeholder">vermelho</span>.</p></div>
+
+  <h2>1. Dois papéis diferentes: controlador e operador</h2>
+  <p>É importante entender como os dados pessoais circulam no Petzy:</p>
+  <ul>
+    <li><strong>A clínica ou petshop (nosso Cliente) é a Controladora</strong> dos dados dos tutores e seus pets: é ela quem decide coletar esses dados, para qual finalidade, e é responsável por ter base legal (geralmente o consentimento do tutor ou a execução de um contrato de prestação de serviço veterinário) para tratá-los.</li>
+    <li><strong>O Petzy atua como Operador</strong>: processamos e armazenamos esses dados exclusivamente para permitir que a clínica preste seus serviços através do sistema, seguindo as instruções da própria clínica, e nunca usamos os dados dos tutores/pets para finalidade própria (como venda a terceiros).</li>
+  </ul>
+  <p>Em relação aos dados da própria clínica (nome, e-mail, telefone, dados de cobrança) e da equipe que usa o sistema, o <strong>Petzy é o Controlador</strong>.</p>
+
+  <h2>2. Quais dados coletamos</h2>
+  <table>
+    <tr><th>Categoria</th><th>Exemplos</th><th>Quem fornece</th></tr>
+    <tr><td>Conta da clínica</td><td>Nome da clínica, CNPJ, e-mail, telefone, endereço, dados de cobrança</td><td>A própria clínica, no cadastro</td></tr>
+    <tr><td>Equipe</td><td>Nome, e-mail, função de acesso dos usuários do sistema</td><td>A clínica, ao cadastrar colaboradores</td></tr>
+    <tr><td>Tutores e pets</td><td>Nome, CPF, telefone, e-mail, endereço do tutor; nome, espécie, raça, peso, foto, histórico clínico e de vacinação do pet</td><td>A clínica, inserido no sistema</td></tr>
+    <tr><td>Uso do sistema</td><td>Registros de acesso, ações realizadas (para a tela de Auditoria), endereço IP</td><td>Gerado automaticamente pelo uso</td></tr>
+  </table>
+
+  <h2>3. Para que usamos os dados</h2>
+  <ul>
+    <li>Viabilizar as funcionalidades do sistema (agenda, prontuário, financeiro, PDV, portal do tutor etc.);</li>
+    <li>Emitir documentos fiscais quando essa integração estiver habilitada pela clínica;</li>
+    <li>Enviar comunicações operacionais (confirmação de cadastro, avisos de cobrança, notificações de sistema);</li>
+    <li>Cumprir obrigações legais e fiscais (ex.: guarda de notas fiscais pelo prazo exigido em lei);</li>
+    <li>Registrar auditoria de segurança (quem criou/editou/excluiu cada informação), para investigação em caso de uso indevido.</li>
+  </ul>
+  <p>Não vendemos, alugamos ou compartilhamos os dados dos tutores/pets com terceiros para fins de marketing de terceiros.</p>
+
+  <h2>4. Com quem compartilhamos dados</h2>
+  <ul>
+    <li><strong>Google Cloud / Firebase</strong>: infraestrutura de hospedagem, banco de dados e autenticação (localização dos servidores conforme a região configurada do projeto).</li>
+    <li><strong>Provedor de emissão de nota fiscal</strong> (quando habilitado pela clínica): recebe os dados estritamente necessários para emitir o documento fiscal (nome/CPF ou CNPJ do tomador, itens, valores).</li>
+    <li><strong>WhatsApp</strong>: quando a clínica ou o tutor usam os botões de contato via WhatsApp, a conversa ocorre diretamente entre as partes fora do Petzy.</li>
+  </ul>
+
+  <h2>5. Por quanto tempo guardamos os dados</h2>
+  <p>Os dados ficam armazenados enquanto a conta da clínica estiver ativa. Após o cancelamento, os dados podem ser mantidos por até <span class="placeholder" id="fRetencao">[ex.: 90 dias]</span> para eventual reativação, e depois excluídos, exceto documentos que a lei exige guardar por mais tempo (ex.: notas fiscais, que devem ser preservadas pelo prazo legal aplicável, tipicamente 5 anos).</p>
+
+  <h2>6. Segurança</h2>
+  <p>Adotamos medidas técnicas para proteger os dados, incluindo: isolamento dos dados de cada clínica (regras de segurança do banco de dados que impedem uma clínica de acessar dados de outra), controle de acesso por função dentro da equipe da clínica, registro de auditoria de alterações, e conexões criptografadas (HTTPS) em todo o sistema.</p>
+
+  <h2>7. Direitos do titular dos dados</h2>
+  <p>Tutores cujos dados estejam cadastrados em alguma clínica que usa o Petzy podem exercer seus direitos previstos na LGPD (acesso, correção, exclusão, portabilidade, entre outros) diretamente com a clínica onde são atendidos, já que ela é a Controladora desses dados. A clínica pode usar a função de exportação (LGPD) disponível em Configurações para atender a esses pedidos. Se preferir, pode também nos contatar em <span class="placeholder" id="fEmail1">[e-mail de contato/DPO]</span> e encaminharemos o pedido à clínica responsável.</p>
+
+  <h2>8. Cookies e armazenamento local</h2>
+  <p>O sistema usa armazenamento local do navegador (localStorage/IndexedDB) para manter sua sessão conectada e permitir o uso do PDV mesmo sem internet. Não utilizamos cookies de rastreamento publicitário.</p>
+
+  <h2>9. Alterações desta política</h2>
+  <p>Podemos atualizar esta Política periodicamente. A data da última atualização estará sempre indicada no topo desta página.</p>
+
+  <h2>10. Contato / Encarregado de Dados (DPO)</h2>
+  <p>Para dúvidas ou solicitações sobre privacidade: <span class="placeholder" id="fEmail2">[e-mail de contato]</span>.</p>
+
+  <p class="mt-5"><a href="index.html">&larr; Voltar para a página inicial</a></p>
+</div>
+<script type="module">
+  // Preenche os campos legais a partir de /sistema/legal (configurado em admin.html · Dados legais).
+  import { db, doc, getDoc } from './js/firebase.js';
+  const preencher = (id, valor) => { if (!valor) return; const el = document.getElementById(id); el.textContent = valor; el.classList.remove('placeholder'); };
+  getDoc(doc(db, 'sistema', 'legal')).then(s => {
+    const d = s.exists() ? s.data() : {};
+    preencher('fAtualizado', d.atualizadoEm ? new Date(d.atualizadoEm).toLocaleDateString('pt-BR') : '');
+    preencher('fRetencao', d.prazoRetencaoDias ? `${d.prazoRetencaoDias} dias` : '');
+    preencher('fEmail1', d.emailContato);
+    preencher('fEmail2', d.emailContato);
+  }).catch(() => {});
+</script>
+</body>
+</html>

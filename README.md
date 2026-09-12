@@ -136,18 +136,40 @@ firebase deploy
 
 O ambiente publicado está em [petzy-c8609.web.app](https://petzy-c8609.web.app).
 
-## Integração fiscal TecnoSpeed
+## Integração fiscal (TecnoSpeed / PlugNotas)
 
-O backend da integração fica em `functions/` e nunca expõe a API key no navegador. Depois de criar a conta PlugNotas/TecnoSpeed e configurar a clínica em **Configurações > Dados > Integração fiscal**, defina o segredo diretamente no terminal:
+A emissão de **NFS-e** roda nas Cloud Functions (`functions/index.js`, região `southamerica-east1`). O navegador nunca vê a API key e nunca monta o documento fiscal: o servidor lê a nota no Firestore e usa sempre o CNPJ da clínica logada.
 
-```bash
-firebase functions:secrets:set TECNOSPEED_API_KEY
-firebase deploy --only functions
-```
+| Função | O que faz |
+|---|---|
+| `emitirNotaFiscal` | Monta a NFS-e, NFC-e ou NF-e a partir da nota, valida e transmite (trava contra clique duplo e contra duas notas para a mesma venda) |
+| `consultarNotaFiscal` | Consulta a autorização e arquiva PDF e XML no Storage da clínica |
+| `cancelarNotaFiscal` | Solicita o cancelamento com motivo e justificativa |
+| `linkArquivoNotaFiscal` | Gera o link de download do PDF/XML, conferindo a permissão no servidor |
+| `verificarEmpresaFiscal` | Diz se o CNPJ está cadastrado na TecnoSpeed e quais documentos (NFS-e/NFC-e/NF-e) ela emite em produção ou homologação |
+| `configurarTokenTecnoSpeed` | Somente o **superadmin**: valida e grava o token da plataforma no Secret Manager |
+| `metaTabelaNcm` / `baixarTabelaNcm` | Tabela de NCM oficial (Receita Federal/Siscomex) usada na NF-e e na NFC-e — veja abaixo |
 
-A função `enviarDocumentoTecnoSpeed` aceita `nfe`, `nfce` e `nfse`, encaminhando o payload para a API PlugNotas. O certificado digital, o cadastro da empresa e os campos tributários devem estar configurados no ambiente TecnoSpeed. Para homologação, use as credenciais e o ambiente de testes fornecidos pelo provedor.
+**Ambientes** (em Configurações › Dados › Integração fiscal):
 
-> Nunca coloque a API key, o certificado A1 ou a senha no `public/`, no Firestore ou no código do navegador. A emissão só deve ser liberada depois de validar o payload e as regras fiscais com o contador.
+- **Teste, sem valor fiscal:** usa o sandbox público da PlugNotas com a empresa de demonstração. Serve para conhecer o fluxo completo (número, PDF e XML) sem certificado.
+- **Homologação:** envia à prefeitura em ambiente de testes. Exige a empresa cadastrada na TecnoSpeed com o certificado A1.
+- **Produção:** notas com valor fiscal. Há uma trava: se o Petzy estiver em homologação mas a empresa estiver em produção na TecnoSpeed, a emissão é bloqueada.
+
+**Token da plataforma:** o superadmin configura em `admin.html` › Integração fiscal. O valor é lido na hora (versão `latest` do segredo), então a troca não exige novo deploy. Também dá para gravar pelo terminal com `firebase functions:secrets:set TECNOSPEED_API_KEY`.
+
+**NFC-e (venda de produto no PDV)** e **NF-e** também são emitidas pelo Petzy, desde que cada produto tenha NCM, CFOP e CSOSN/CST preenchidos (em Produtos & Serviços, ou completados na hora, direto do PDV, quando falta algum). Qualquer nota pode gerar um **recibo sem valor fiscal**.
+
+> Notas transmitidas só podem ser alteradas pelo backend. As regras do Firestore bloqueiam edição e exclusão pelo app, e elas não entram na limpeza de dados, porque têm guarda obrigatória.
+
+### Tabela de NCM
+
+A classificação fiscal dos produtos usa a tabela oficial do Siscomex/Receita Federal (~10 mil códigos). Como o download não libera CORS para o navegador, o fluxo é:
+
+1. Em **Configurações › Dados › Tabela de NCM**, o administrador clica em **"Atualizar tabela de NCM"**.
+2. A função `baixarTabelaNcm` busca a tabela na fonte oficial, filtra os códigos completos (8 dígitos) e enriquece cada um com o texto da posição/subposição (muitos códigos-folha têm descrição genérica, como "Outros" — o contexto útil está um nível acima na hierarquia). O resultado fica em cache no Storage e no Firestore (`sistema/ncmMeta`) por 24h, para não sobrecarregar o Siscomex a cada clínica.
+3. O navegador salva a tabela completa no **IndexedDB** (`public/js/ncm.js`) e passa a buscar localmente, sem rede.
+4. A busca (no cadastro de produto e na janela rápida do PDV) casa por código ou por palavras da descrição, com fronteira de palavra (evita, por exemplo, achar "trela" dentro de "anis-**estrela**do") e um pequeno dicionário de sinônimos para termos de petshop que divergem da nomenclatura aduaneira oficial (ex.: "ração" → "alimento", "coleira" → "trela").
 
 ## Licenciamento e cobrança
 

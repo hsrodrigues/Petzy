@@ -28,6 +28,7 @@ export async function render(view, { params }) {
   view.innerHTML = `
     ${pageHeader('Agenda', 'Consultas, vacinas, banho & tosa e cirurgias · <i class="bi bi-arrows-move"></i> arraste um agendamento para remarcar',
       `<button class="btn btn-primary" id="btnNovo"><i class="bi bi-plus-lg me-1"></i>Novo agendamento</button>`)}
+    <div id="painelPortal" class="mb-3"></div>
     <div class="card">
       <div class="card-header d-flex align-items-center gap-2 flex-wrap">
         <div class="btn-group">
@@ -78,7 +79,56 @@ export async function render(view, { params }) {
     $('#grid', view).innerHTML = html;
   }
 
-  function abrirForm(ag = {}) {
+  // ---------- pedidos de horário feitos pelo tutor no Portal ----------
+  let solicitacoes = [];
+  async function carregarSolicitacoes() {
+    solicitacoes = (await list('solicitacoesPortal')).filter(s => s.status === 'pendente').sort((a, b) => String(a.criadoEm).localeCompare(String(b.criadoEm)));
+    desenharSolicitacoes();
+  }
+  function desenharSolicitacoes() {
+    const painel = $('#painelPortal', view);
+    if (!solicitacoes.length) { painel.innerHTML = ''; return; }
+    painel.innerHTML = `<div class="card border-primary">
+      <div class="card-header text-primary d-flex align-items-center gap-2"><i class="bi bi-phone"></i>Pedidos de horário pelo portal do tutor (${solicitacoes.length})</div>
+      <div class="list-group list-group-flush">${solicitacoes.map(s => { const publico = s.origem === 'publico'; return `
+        <div class="list-group-item d-flex flex-wrap gap-2 align-items-center">
+          <div class="flex-fill">
+            <div class="fw-semibold fs-7">${publico
+              ? `<i class="bi bi-person-plus text-primary"></i> ${esc(s.nomeContato || 'Novo contato')} <span class="text-muted fw-normal">· ainda não é cliente${s.petNome ? ' · pet: ' + esc(s.petNome) : ''}</span>`
+              : `${emoji(P[s.petId]?.especie)} ${esc(s.petNome || P[s.petId]?.nome || 'Pet')} <span class="text-muted fw-normal">· ${esc(C[P[s.petId]?.clienteId]?.nome || '')}</span>`}</div>
+            <div class="fs-7">${esc(s.motivo)}${publico && s.tipoServico ? ` · ${esc(s.tipoServico)}` : ''}</div>
+            ${publico ? `<div class="fs-8 text-muted">Telefone: ${esc(s.telefoneContato || '—')}</div>` : ''}
+            ${s.horario ? `<div class="fs-8 text-primary fw-semibold"><i class="bi bi-calendar-check me-1"></i>Escolheu: ${fmtDateTime(s.horario)}</div>` : ''}
+            ${s.preferencia ? `<div class="fs-8 text-muted">Prefere: ${esc(s.preferencia)}</div>` : ''}
+          </div>
+          <button class="btn btn-sm btn-light border" data-recusar-portal="${s.id}">Recusar</button>
+          <button class="btn btn-sm btn-primary" data-agendar-portal="${s.id}"><i class="bi bi-calendar-plus me-1"></i>${publico ? 'Cadastrar e agendar' : 'Agendar'}</button>
+        </div>`; }).join('')}</div>
+    </div>`;
+    painel.onclick = async (e) => {
+      const ag = e.target.closest('[data-agendar-portal]'), rec = e.target.closest('[data-recusar-portal]');
+      const s = solicitacoes.find(x => x.id === (ag?.dataset.agendarPortal || rec?.dataset.recusarPortal));
+      if (!s) return;
+      if (ag) {
+        const publico = s.origem === 'publico';
+        const obs = publico
+          ? `Pedido pelo site: ${s.nomeContato || ''} (${s.telefoneContato || ''})${s.petNome ? ' · pet: ' + s.petNome : ''} · ${s.motivo}${s.preferencia ? ' · Prefere: ' + s.preferencia : ''} — cadastre o tutor/pet antes de salvar.`
+          : `Pedido pelo portal: ${s.motivo}${s.preferencia ? ' · Prefere: ' + s.preferencia : ''}`;
+        const base = publico ? { obs } : { petId: s.petId, obs };
+        if (s.horario) base.inicio = s.horario; // horário que a pessoa escolheu na grade do site
+        abrirForm(base, () => marcarSolicitacao(s.id, 'atendida'));
+      }
+      if (rec && exigirLicenca() && await confirmar(`Recusar o pedido de ${esc(s.petNome || s.nomeContato || 'contato')}? A pessoa não é avisada automaticamente — combine o retorno por WhatsApp.`)) {
+        marcarSolicitacao(s.id, 'recusada');
+      }
+    };
+  }
+  async function marcarSolicitacao(id, status) {
+    await update('solicitacoesPortal', id, { status });
+    await carregarSolicitacoes();
+  }
+
+  function abrirForm(ag = {}, aposSalvar) {
     if (!exigirLicenca()) return;
     if (!dados.pets.length) return toast('Cadastre um pet antes de agendar.', 'warning');
     formModal({
@@ -110,6 +160,7 @@ export async function render(view, { params }) {
         await save('agendamentos', ag.id, d);
         toast(ag.id ? 'Agendamento atualizado' : 'Agendamento criado 📅');
         await carregar();
+        aposSalvar?.();
       }
     });
   }
@@ -248,5 +299,5 @@ export async function render(view, { params }) {
   $('#limparFiltros', view).onclick = () => { $('#fProf', view).value = ''; desenhar(); };
   $('#btnNovo', view).onclick = () => { const d = new Date(); d.setMinutes(d.getMinutes() < 30 ? 30 : 60, 0, 0); abrirForm({ inicio: toISODateTime(d) }); };
 
-  await carregar();
+  await Promise.all([carregar(), carregarSolicitacoes()]);
 }

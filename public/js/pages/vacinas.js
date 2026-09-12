@@ -75,7 +75,8 @@ export async function render(view, { params }) {
     }).join('') : `<tr><td colspan="6">${empty('shield', 'Nada por aqui.')}</td></tr>`;
   }
 
-  async function recarregar() { vacinas = await list('vacinas'); desenhar(); }
+  const telaAtiva = view.firstElementChild; // some quando o usuário navega para outra tela
+  async function recarregar() { vacinas = await list('vacinas'); if (telaAtiva.isConnected) desenhar(); }
 
   function abrirForm(v = {}) {
     if (!exigirLicenca()) return;

@@ -34,9 +34,29 @@ service cloud.firestore {
       return c.status in ['trial', 'ativo'] && c.validoAteMs > request.time.toMillis();
     }
 
-    // campos de cobranca que so o superadmin altera
+    // campos de cobranca (e de agrupamento em rede) que so o superadmin altera: se o admin da
+    // clinica pudesse editar redeId livremente, bastaria "adivinhar" o id de outra rede para
+    // passar a ver os numeros agregados de um negocio que nao e o dele.
     function camposLicenca() {
-      return ['plano', 'status', 'validoAteMs', 'trialAte', 'ownerUid', 'valorMensal'];
+      return ['plano', 'status', 'validoAteMs', 'trialAte', 'ownerUid', 'valorMensal', 'redeId'];
+    }
+
+    // modulo fiscal: admin e recepcao, ou quem recebeu o modulo como extra (e nao esta bloqueado)
+    function podeFiscal(cid) {
+      let p = perfil();
+      let extras = p.get('modulosExtras', []);
+      let bloqueados = p.get('modulosBloqueados', []);
+      return membro(cid)
+        && (p.get('papel', '') in ['admin', 'recepcao'] || (extras is list && extras.hasAny(['fiscal'])))
+        && !(bloqueados is list && bloqueados.hasAny(['fiscal']));
+    }
+
+    // campos de nota fiscal que so o backend grava (retorno do provedor, protocolo, arquivos)
+    function camposFiscaisServidor() {
+      return ['protocolo', 'idProvedor', 'idIntegracao', 'situacaoProvedor', 'codigoVerificacao', 'dataAutorizacao',
+        'pdfPath', 'xmlPath', 'enviadaEm', 'enviadaPor', 'tentativas', 'prestadorCnpj', 'semValorFiscal',
+        'cancelamentoProtocolo', 'cancelamentoCodigo', 'cancelamentoMotivo', 'canceladaPor', 'canceladaEm',
+        'ambiente', 'provedor', 'mensagem', 'protocoloAutorizacao'];
     }
 
     // ---------- donos do SaaS ----------
@@ -55,6 +75,12 @@ service cloud.firestore {
     match /sistema/{docId} {
       allow read: if true;
       allow write: if superAdmin();
+    }
+
+    // ---------- metadados internos do SaaS: so o superadmin le; so o backend grava ----------
+    match /admin/{docId} {
+      allow read: if superAdmin();
+      allow write: if false;
     }
 
     // ---------- pedidos de assinatura/renovacao (funciona mesmo com licenca vencida) ----------
@@ -111,13 +137,47 @@ service cloud.firestore {
         allow write: if admin(cid);
       }
 
-      // dados operacionais: leitura sempre; escrita so com licenca ativa
+      // notas fiscais: rascunhos e notas registradas manualmente sao editaveis pelo app;
+      // nota transmitida ao provedor (integracao == true) so muda pelo backend (Cloud Functions)
+      match /fiscal/{nid} {
+        allow read: if membro(cid) || superAdmin();
+        allow create: if podeFiscal(cid) && licencaAtiva(cid)
+          && !request.resource.data.keys().hasAny(camposFiscaisServidor())
+          && (request.resource.data.get('integracao', false) != true || request.resource.data.get('status', '') == 'rascunho');
+        allow update: if podeFiscal(cid) && licencaAtiva(cid)
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(camposFiscaisServidor())
+          && (
+            (resource.data.get('integracao', false) == true
+              && resource.data.get('status', '') in ['rascunho', 'rejeitada']
+              && request.resource.data.get('status', '') == resource.data.get('status', '')
+              && request.resource.data.get('integracao', false) == true)
+            || (resource.data.get('integracao', false) != true
+              && (request.resource.data.get('integracao', false) != true || request.resource.data.get('status', '') == 'rascunho'))
+          );
+        allow delete: if podeFiscal(cid) && licencaAtiva(cid)
+          && (resource.data.get('integracao', false) != true || resource.data.get('status', '') in ['rascunho', 'rejeitada']);
+      }
+
+      // auditoria: registro imutavel de quem criou/editou/excluiu cada registro. O app grava uma
+      // linha a cada escrita (ver js/store.js); ninguem, nem o admin, pode alterar ou apagar depois -
+      // senao um usuario mal-intencionado poderia cobrir o proprio rastro.
+      match /auditoria/{docId} {
+        allow read: if admin(cid) || superAdmin();
+        allow create: if membro(cid) && licencaAtiva(cid) && request.resource.data.usuarioId == request.auth.uid;
+        allow update, delete: if false;
+      }
+
+      // dados operacionais: leitura sempre; escrita so com licenca ativa.
+      // IMPORTANTE: um match mais especifico (ex.: /auditoria/{docId} acima) NAO substitui este bloco
+      // generico quando os dois combinam com o mesmo caminho - o Firestore combina as regras que
+      // combinam com OR (basta uma permitir). Por isso toda colecao com regra propria tem que
+      // aparecer aqui tambem, senao esta regra generica reabre exatamente o que a especifica fechou.
       match /{colecao}/{docId} {
         allow read: if membro(cid) || superAdmin();
         allow create, update: if membro(cid) && licencaAtiva(cid)
-          && !(colecao in ['faturas', 'equipe']);
+          && !(colecao in ['faturas', 'equipe', 'fiscal', 'auditoria']);
         allow delete: if membro(cid) && licencaAtiva(cid)
-          && !(colecao in ['faturas', 'equipe'])
+          && !(colecao in ['faturas', 'equipe', 'fiscal', 'auditoria'])
           && perfil().papel in ['admin', 'veterinario'];
       }
     }
