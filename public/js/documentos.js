@@ -19,8 +19,14 @@ export const TIPOS_DOC = {
 export const menuDocs = (tipos, attr = 'data-doc') => tipos.map(k => k === '-' ? '<li><hr class="dropdown-divider"></li>'
   : `<li><button type="button" class="dropdown-item" ${attr}="${k}"><i class="bi bi-${TIPOS_DOC[k].i} me-2 text-primary"></i>${TIPOS_DOC[k].t}</button></li>`).join('');
 
-const vetDe = (a) => a ? { nome: a.vetNome || state.perfil.nome, crmv: a.vetCrmv || (a.vetId === state.user.uid ? state.perfil.crmv : '') }
-  : { nome: state.perfil.nome, crmv: state.perfil.crmv };
+// O atendimento grava o nome/CRMV do profissional no momento em que é criado (histórico do
+// prontuário não deve mudar se um COLEGA trocar o próprio nome depois). Mas se quem está gerando o
+// documento agora é o MESMO profissional que atendeu, usa sempre o nome atual do perfil — senão,
+// corrigir um erro de digitação no próprio nome nunca refletiria nos atendimentos já salvos.
+const vetDe = (a) => {
+  if (a?.vetId && a.vetId !== state.user.uid) return { nome: a.vetNome || '', crmv: a.vetCrmv || '' };
+  return { nome: state.perfil.nome, crmv: state.perfil.crmv };
+};
 
 // Mostra o documento num modal com botão de imprimir / salvar PDF (sem depender de pop-up)
 export function previsualizar(html, titulo) {

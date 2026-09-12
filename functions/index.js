@@ -1018,3 +1018,45 @@ exports.buscarProdutoPorEan = onCall(COM_COSMOS, async (request) => {
 
   return { encontrado: false };
 });
+
+// ================= Gestão de superadmins =================
+// Lista todos os administradores do Petzy — o Firestore só deixa cada um ler o próprio documento em
+// /superadmins (de propósito), então listar todos também precisa passar pelo Admin SDK.
+exports.listarSuperadmins = onCall(OPCOES, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Faça login para continuar.');
+  if (!(await db.doc(`superadmins/${request.auth.uid}`).get()).exists) {
+    throw new HttpsError('permission-denied', 'Somente um administrador do Petzy pode ver esta lista.');
+  }
+  const snap = await db.collection('superadmins').get();
+  return { lista: snap.docs.map(d => { const x = d.data(); return { uid: d.id, email: x.email || '', nome: x.nome || '', concedidoEm: x.concedidoEm?.toDate?.().toISOString() || null }; }) };
+});
+
+// /superadmins/{uid} tem "allow write: if false" no Firestore — de propósito, pra ninguém conseguir
+// se promover a dono do SaaS só editando o banco pelo app. A única porta de entrada é esta função,
+// que só um superadmin já existente pode chamar (Admin SDK, nunca passa pelas regras do cliente).
+exports.gerenciarSuperadmin = onCall(OPCOES, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Faça login para continuar.');
+  if (!(await db.doc(`superadmins/${request.auth.uid}`).get()).exists) {
+    throw new HttpsError('permission-denied', 'Somente um administrador do Petzy pode gerenciar outros administradores.');
+  }
+  const email = String(request.data?.email || '').trim().toLowerCase();
+  const acao = request.data?.acao === 'revogar' ? 'revogar' : 'conceder';
+  if (!email) throw new HttpsError('invalid-argument', 'Informe o e-mail da pessoa.');
+
+  const { getAuth } = require('firebase-admin/auth');
+  let usuario;
+  try { usuario = await getAuth().getUserByEmail(email); }
+  catch { throw new HttpsError('not-found', 'Não existe nenhuma conta com este e-mail no Petzy. A pessoa precisa se cadastrar primeiro.'); }
+
+  if (acao === 'revogar') {
+    const restantes = await db.collection('superadmins').count().get();
+    if (restantes.data().count <= 1) throw new HttpsError('failed-precondition', 'Não é possível remover o único administrador do Petzy restante.');
+    await db.doc(`superadmins/${usuario.uid}`).delete();
+    return { ok: true, acao, nome: usuario.displayName || usuario.email };
+  }
+
+  await db.doc(`superadmins/${usuario.uid}`).set({
+    email: usuario.email, nome: usuario.displayName || '', concedidoPor: request.auth.uid, concedidoEm: agora()
+  });
+  return { ok: true, acao, nome: usuario.displayName || usuario.email };
+});

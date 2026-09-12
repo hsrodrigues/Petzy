@@ -68,7 +68,8 @@
         <div class="d-flex gap-2"><button class="btn btn-light border" id="btnPlanos"><i class="bi bi-tags me-1"></i>Planos e preços</button>
         <button class="btn btn-light border" id="btnCfg"><i class="bi bi-gear me-1"></i>Formas de pagamento</button>
         <button class="btn btn-light border" id="btnFiscal"><i class="bi bi-receipt-cutoff me-1"></i>Integração fiscal</button>
-        <button class="btn btn-light border" id="btnLegal"><i class="bi bi-file-earmark-text me-1"></i>Dados legais</button></div></div>
+        <button class="btn btn-light border" id="btnLegal"><i class="bi bi-file-earmark-text me-1"></i>Dados legais</button>
+        <button class="btn btn-light border" id="btnSuperadmins"><i class="bi bi-shield-lock me-1"></i>Administradores</button></div></div>
       <div class="row g-3 mb-4">
         <div class="col-6 col-xl-3">${kpi('building', 'Clínicas cadastradas', clinicas.length)}</div>
         <div class="col-6 col-xl-3">${kpi('check-circle', 'Assinantes ativos', ativas.length, 'success')}</div>
@@ -91,6 +92,7 @@
     $('#btnPlanos').onclick = configurarPlanos;
     $('#btnFiscal').onclick = configurarFiscal;
     $('#btnLegal').onclick = configurarLegal;
+    $('#btnSuperadmins').onclick = gerenciarSuperadmins;
     $('#main').onclick = acoes;
   }
 
@@ -299,6 +301,58 @@
         toast('Dados legais salvos — já refletem em termos.html e privacidade.html');
       }
     });
+  }
+
+  // /superadmins tem escrita bloqueada nas regras do Firestore de propósito — só esta função (via
+  // Cloud Functions com Admin SDK) pode conceder ou revogar o acesso, e só quem já é superadmin
+  // consegue chamá-la. A pessoa precisa já ter uma conta no Petzy (login.html) antes de virar admin.
+  async function gerenciarSuperadmins() {
+    const meuUid = auth.currentUser?.uid;
+    let lista = [];
+    const { el } = modal({
+      title: '<i class="bi bi-shield-lock me-2 text-primary"></i>Administradores do Petzy', size: 'md',
+      body: `
+        <p class="text-muted fs-7">Quem estiver aqui tem acesso total a este painel — todas as clínicas, licenças e cobranças. A pessoa precisa já ter uma conta cadastrada no Petzy.</p>
+        <div class="d-flex gap-2 mb-3">
+          <input class="form-control" id="emailNovoAdmin" type="email" placeholder="e-mail da pessoa">
+          <button class="btn btn-primary text-nowrap" id="btnConceder"><i class="bi bi-plus-lg me-1"></i>Conceder</button>
+        </div>
+        <div id="listaSuperadmins"><div class="loading"><div class="spinner-border spinner-border-sm"></div></div></div>`
+    });
+
+    async function carregar() {
+      lista = (await chamarFuncao('listarSuperadmins', {})).lista;
+      $('#listaSuperadmins', el).innerHTML = lista.length ? `<div class="list-group list-group-flush">${lista.map(s => `
+        <div class="list-group-item d-flex justify-content-between align-items-center">
+          <div><div class="fw-semibold fs-7">${esc(s.nome || s.email)}${s.uid === meuUid ? ' <span class="badge bg-primary">você</span>' : ''}</div>
+          <div class="fs-8 text-muted">${esc(s.email)}</div></div>
+          <button class="btn btn-sm btn-outline-danger" data-revogar="${esc(s.email)}" ${lista.length <= 1 ? 'disabled title="não é possível remover o único administrador"' : ''}><i class="bi bi-x-lg"></i></button>
+        </div>`).join('')}</div>` : '<p class="text-muted fs-7">Nenhum administrador encontrado.</p>';
+    }
+
+    $('#btnConceder', el).onclick = async () => {
+      const btn = $('#btnConceder', el), email = $('#emailNovoAdmin', el).value.trim();
+      if (!email) return toast('Informe o e-mail da pessoa.', 'warning');
+      btn.disabled = true;
+      try {
+        const r = await chamarFuncao('gerenciarSuperadmin', { email, acao: 'conceder' });
+        toast(`${r.nome} agora é administrador(a) do Petzy`);
+        $('#emailNovoAdmin', el).value = '';
+        await carregar();
+      } catch (e) { toast(e.message, 'danger'); }
+      finally { btn.disabled = false; }
+    };
+    $('#listaSuperadmins', el).onclick = async (e) => {
+      const b = e.target.closest('[data-revogar]'); if (!b) return;
+      if (!(await confirmar(`Remover o acesso de administrador de <strong>${esc(b.dataset.revogar)}</strong>?`))) return;
+      try {
+        await chamarFuncao('gerenciarSuperadmin', { email: b.dataset.revogar, acao: 'revogar' });
+        toast('Acesso removido');
+        await carregar();
+      } catch (e) { toast(e.message, 'danger'); }
+    };
+
+    await carregar();
   }
 </script>
 </body>
